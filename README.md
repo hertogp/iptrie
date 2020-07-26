@@ -1,7 +1,21 @@
-# iptrie
+# Iptrie
 
-IP v4/v6 longest prefix lookup tree.
+**TODO: Add description**
 
-A level/path compressed patricia tree using longest prefix matching, where keys
-are bitstrings.
+## Installation
+
+If [available in Hex](https://hex.pm/docs/publish), the package can be installed
+by adding `iptrie` to your list of dependencies in `mix.exs`:
+
+```elixir
+def deps do
+  [
+    {:iptrie, "~> 0.1.0"}
+  ]
+end
+```
+
+Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
+and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
+be found at [https://hexdocs.pm/iptrie](https://hexdocs.pm/iptrie).
 
