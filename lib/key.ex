@@ -4,7 +4,6 @@ defmodule Iptrie.Key do
   keys.  Keys are prefixes encoded as a bitstring whose frst bit indicates whether
   it is an IPv4 or an IPv6 address.
 
-
   """
 
   use Bitwise
