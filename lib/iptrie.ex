@@ -1,143 +1,268 @@
 defmodule Iptrie do
   @moduledoc """
-  `Iptrie` provides an IP lookup table for both IPv4 and IPv6, as well as
-  some functions to manipulate prefixes.
-
+  `Iptrie` Ip lookup table using longest prefix match.
 
   """
   alias Iptrie.Key
+  alias Iptrie.Dot
 
-  @doc """
-  Encode a prefix string `"address/len"` into a `key` used for lookup's in the
-  iptrie.  A key is bitstring whose first bit indicates either an IPv4 or an
-  IPv6 address, the remaining bits are the network address bits provided. This
-  means only contiguous masks are supported.  If the `len` is omitted, it
-  defaults to the address family's maximum mask.
+  @empty {0, nil, nil}
 
-  ## Examples
+  # Tree
+  # - node {bit >= 0, l, r}, where l and/or r might be nil
+  # - leaf {-1, [{k,v}, ..]}
 
-      iex> Iptrie.encode("10.10.10.22/24")
-      {:ok, <<0::1, 10::8, 10::8, 10::8>>}
+  # HELPERS
 
-      iex> Iptrie.encode("abcd::/16")
-      {:ok, <<1::1, 0xabcd::16>>}
+  def ascii(key), do: Iptrie.Key.to_ascii(key) |> Iptrie.Key.ok()
 
-  Omitting a mask:
-
-      iex> Iptrie.encode("10.10.10.10")
-      {:ok, <<0::1, 10::8, 10::8, 10::8, 10::8>>}
-
-
-  Zero length prefix is also valid:
-
-      iex> Iptrie.encode("255.255.255.255/0")
-      {:ok, <<0::1>>}
-
-      iex> Iptrie.encode("abcd::/0")
-      {:ok, <<1::1>>}
-
-  """
-  def encode(prefix) do
-    Key.encode(prefix)
+  # get key's position in the tree: {bitpos, match-type}
+  def tree_pos(bst, key) do
+    case get(bst, key) do
+      nil -> {bit_size(key) - 1, :nomatch}
+      leaf -> {bitdiff(leaf, key), kvmatch(leaf, key)}
+    end
   end
 
-  @doc """
-  Given a key, decode it back into its regular string form.  If the
-  intermediate form of decoded key is required, use `Iptrie.Key.decode/1`
-  instead.
+  def bitdiff([{k, _v} | _leaf], key), do: Key.diffbit(k, key)
 
-      iex> Iptrie.decode(<<0::1, 10::8, 10::8, 10::8>>)
-      {:ok, "10.10.10.0/24"}
+  # match type for key relative to a leaf's keys (:nomatch, :equal, :more or :less)
+  # def kvmatch([], _key), do: :nomatch
 
-      iex> Iptrie.decode(<<0::1, 10::8, 10::8, 10::8, 10::8>>)
-      {:ok, "10.10.10.10/32"}
+  # def kvmatch([{k, _} | tail], key) do
+  #   case Key.match(key, k) do
+  #     :nomatch -> kvmatch(tail, key)
+  #     result -> result
+  #   end
+  # end
 
-      iex> Iptrie.decode(<<0::1>>)
-      {:ok, "0.0.0.0/0"}
+  def kvmatch([], _key), do: :split
 
-      iex> Iptrie.decode(<<1::1, 0xacdc::16, 0xabba::16, 0xdada::16>>)
-      {:ok, "acdc:abba:dada::/48"}
+  def kvmatch(kv, key) do
+    matches = IO.inspect(Enum.map(kv, fn {k, _v} -> Key.match(key, k) end), label: "matches")
 
-      iex> Iptrie.decode(<<1::1>>)
-      {:ok, "::/0"}
-
-  """
-
-  def decode(key) do
-    Key.decode(key)
-    |> Key.format(mask: true)
+    cond do
+      :equal in matches -> :update
+      :more in matches -> :add
+      :less in matches -> :add
+      :supernet in matches -> :split
+      :subnet in matches -> :split
+      :nomatch in matches -> :split
+    end
   end
 
-  @doc """
-  Parse the address portion from a given prefix.  The mask (if any) is ignored
-  completely so its validity is never checked.
+  # API
+  # TODO:
+  # - returning {:error, reason} feels wrong for tree operations ...
+  # - adding supernets *after* more specifics -> yields wrong lookups when
+  #   subnets in the upper half of the supernet exist(ed) in the tree.
 
-  ## Examples
+  @spec new :: {0, nil, nil}
+  def new, do: @empty
 
-      iex> Iptrie.address("10.10.10.10/24")
-      {:ok, "10.10.10.10"}
+  # run down the tree and return leaf (might be nil) based on key-path
+  def get(nil, _key), do: nil
 
-      # wonders of :inet.ntoa/1
-      iex> Iptrie.address("::ffff/128")
-      {:ok, "::0.0.255.255"}
+  def get({-1, leaf}, _key), do: leaf
 
-  """
-
-  def address(prefix) when is_binary(prefix) do
-    prefix
-    |> String.split("/", parts: 2)
-    |> List.first()
-    |> Key.encode()
-    |> Key.digits(0)
-    |> Key.format(mask: false)
+  def get({bit, l, r}, key) do
+    case(Key.bit(key, bit)) do
+      0 -> get(l, key)
+      1 -> get(r, key)
+    end
   end
 
-  def address(_), do: {:error, :eaddress}
+  # PUT:
+  # insert/update a {key,value}-pair into the tree
+  # - {pos, type}, type = :equal, :more, :less, :nomatch
 
-  @doc """
-  Get the network address for a given prefix.  A second optional argument
-  specifies whether the prefix length should be included in the result
-  (defaults to false).
+  # ran into an empty leaf, so take it
+  def put(nil, _treepos, key, val), do: newleaf({key, val})
 
-      iex> Iptrie.network("10.10.10.10/24")
-      {:ok, "10.10.10.0"}
-
-      iex> Iptrie.network("10.10.10.10/24", true)
-      {:ok, "10.10.10.0/24"}
-
-      iex> Iptrie.network("acdc::abba/128")
-      {:ok, "acdc::abba"}
-
-  """
-
-  def network(prefix, with_mask \\ false) do
-    prefix
-    |> Key.encode()
-    |> Key.decode()
-    |> Key.format(mask: with_mask)
+  # follow treepath, insert somewhere left or right
+  def put({bit, l, r}, {pos, type}, key, val) when pos > bit do
+    case Key.bit(key, bit) do
+      0 -> {bit, put(l, {pos, type}, key, val), r}
+      1 -> {bit, l, put(r, {pos, type}, key, val)}
+    end
   end
 
+  # we ran into a non-empty leaf.
+  # - split if there was :nomatch or key is a :supernet or :subnet
+  # - update leaf if key :equal (leaf has key)
+  # - add to leaf if :more or :less specific (same network address)
+  def put({-1, leaf}, {pos, type}, key, val) do
+    IO.inspect("pos: #{pos}, type: #{type}", label: "LEAF")
+
+    case type do
+      :split ->
+        # split tree, new key decides if it goes left or right
+        case Key.bit(key, pos) do
+          0 -> {pos, newleaf({key, val}), {-1, leaf}}
+          1 -> {pos, {-1, leaf}, newleaf({key, val})}
+        end
+
+      :add ->
+        newleaf([{key, val} | leaf])
+
+      :update ->
+        {-1, Enum.map(leaf, fn {k, v} -> if k == key, do: {k, val}, else: {k, v} end)}
+
+        # ====#
+        # :nomatch ->
+        #   # split tree, new key decides if it goes left or right
+        #   case Key.bit(key, pos) do
+        #     0 -> {pos, newleaf({key, val}), {-1, leaf}}
+        #     1 -> {pos, {-1, leaf}, newleaf({key, val})}
+        #   end
+
+        # :equal ->
+        #   # update the existing key's value in leaf
+        #   {-1, Enum.map(leaf, fn {k, v} -> if k == key, do: {k, val}, else: {k, v} end)}
+
+        # :less ->
+        #   # less specific, same network address
+        #   # {-1, Enum.sort([{key, val} | leaf], {:desc, Iptrie.Key})}
+        #   newleaf([{key, val} | leaf])
+
+        # :more ->
+        #   # more specific, same network address
+        #   newleaf([{key, val} | leaf])
+
+        # :subnet ->
+        #   # split tree, new key decides if it goes left or right
+        #   case Key.bit(key, pos) do
+        #     # 0 -> {pos, {-1, [{key, val}]}, {-1, leaf}}
+        #     # 1 -> {pos, {-1, leaf}, {-1, [{key, val}]}}
+        #     0 -> {pos, newleaf({key, val}), {-1, leaf}}
+        #     1 -> {pos, {-1, leaf}, newleaf({key, val})}
+        #   end
+
+        # :supernet ->
+        #   # split tree, new key decides if it goes left or right
+        #   case Key.bit(key, pos) do
+        #     # 0 -> {pos, {-1, [{key, val}]}, {-1, leaf}}
+        #     # 1 -> {pos, {-1, leaf}, {-1, [{key, val}]}}
+        #     0 -> {pos, newleaf({key, val}), {-1, leaf}}
+        #     1 -> {pos, {-1, leaf}, newleaf({key, val})}
+        #   end
+    end
+  end
+
+  # pos >= bit and bit != 1, so at internal node
+  # :nomatch means split the tree
+  # :equal, :less, :more, :subnet, :supernet  means continue towards leaf
+  def put({bit, l, r}, {pos, type}, key, val) do
+    IO.inspect("bit #{bit}, pos: #{pos}, type: #{type}", label: "NODE")
+
+    case type do
+      :split ->
+        # split the tree, the new key decides new left or right leaf
+        case Key.bit(key, pos) do
+          0 -> {pos, newleaf({key, val}), {bit, l, r}}
+          1 -> {pos, {bit, l, r}, newleaf({key, val})}
+        end
+
+      _ ->
+        # otherwise -> continue path towards leaf
+        put({bit, l, r}, {bit + 1, type}, key, val)
+
+        # ==#
+        # :nomatch ->
+        #   # split the tree, the new key decides new left or right leaf
+        #   case Key.bit(key, pos) do
+        #     0 -> {pos, newleaf({key, val}), {bit, l, r}}
+        #     1 -> {pos, {bit, l, r}, newleaf({key, val})}
+        #   end
+
+        # _ ->
+        #   # otherwise -> continue path towards leaf
+        #   put({bit, l, r}, {bit + 1, type}, key, val)
+    end
+  end
+
+  # create new leaf
+  def newleaf(nil), do: {-1, nil}
+  def newleaf([]), do: {-1, nil}
+  def newleaf({k, v}), do: {-1, [{k, v}]}
+  def newleaf(l) when is_list(l), do: {-1, Enum.sort(l, {:desc, Iptrie.Key})}
+
+  def to_list(bst), do: to_list(bst, [])
+  defp to_list({_bit, l, r}, acc), do: to_list(l, acc) ++ to_list(r, [])
+  defp to_list({-1, leaf}, acc), do: leaf ++ acc
+  defp to_list(nil, acc), do: acc
+
+  def add(bst, key, val) do
+    case Key.to_key(key) do
+      {:ok, key} -> put(bst, tree_pos(bst, key), key, val)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def lookup(bst, key) do
+    case Key.to_key(key) do
+      {:ok, key} -> lpm(bst, key)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # key satisfies k if it is equal to or more specific than k or lies in k
+  def satisfies?(key, k) do
+    case Key.match(key, k) do
+      :equal -> true
+      :more -> true
+      :subnet -> true
+      _ -> false
+    end
+  end
+
+  # get the longest prefix match for binary key
+  def lpm({_, _, _} = tree, key) do
+    case get(tree, key) do
+      nil -> nil
+      leaf -> Enum.find(leaf, nil, fn {k, _} -> satisfies?(key, k) end)
+    end
+  end
+
+  def dot(bst, fname) do
+    File.write(fname, Dot.dotify(bst))
+    bst
+  end
+
+  # TRAVERSALs
+
   @doc """
-  Get the broadcast address for a given prefix. An optional second arguments
-  may be given to include the prefix length in the result (defaults to false).
-
-  ## Examples
-
-     iex> Iptrie.broadcast("10.10.10.0/24")
-     {:ok, "10.10.10.255"}
-
-     iex> Iptrie.broadcast("10.10.10.0/24", true)
-     {:ok, "10.10.10.255/24"}
-
-     iex> Iptrie.broadcast("1234:5678::/32")
-     {:ok, "1234:5678:ffff:ffff:ffff:ffff:ffff:ffff"}
+  Traverse the tree in `order`, one of (:inorder, :preorder, :postorder), and
+  run function f on each node.  Function f should have the signatures:
+    f :: (acc, {bit, l, r}) -> acc
+    f :: (acc, {-1, leaf}) -> acc
+    f :: (acc, nil) -> acc
 
   """
+  def traverse(acc, f, node, order \\ :inorder)
 
-  def broadcast(prefix, with_mask \\ false) do
-    prefix
-    |> Key.encode()
-    |> Key.digits(1)
-    |> Key.format(mask: with_mask)
+  def traverse(acc, fun, {bit, l, r}, order) do
+    case order do
+      :inorder ->
+        acc
+        |> traverse(fun, l, order)
+        |> fun.({bit, l, r})
+        |> traverse(fun, r, order)
+
+      :preorder ->
+        acc
+        |> fun.({bit, l, r})
+        |> traverse(fun, l, order)
+        |> traverse(fun, r, order)
+
+      :postorder ->
+        acc
+        |> traverse(fun, l, order)
+        |> traverse(fun, r, order)
+        |> fun.({bit, l, r})
+    end
   end
+
+  def traverse(acc, fun, nil, _order), do: fun.(acc, nil)
+  def traverse(acc, fun, {-1, leaf}, _order), do: fun.(acc, leaf)
 end
