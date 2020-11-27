@@ -4,8 +4,8 @@ defmodule Iptrie.Dot do
 
   """
 
-  alias Iptrie
-  alias Iptrie.Key
+  alias Iptrie.Pfx
+  alias Iptrie.Rdx
 
   @color %{
     root: "orange",
@@ -17,8 +17,8 @@ defmodule Iptrie.Dot do
 
   defp to_ascii(key) do
     key
-    |> Key.to_ascii()
-    |> Key.ok()
+    |> Pfx.to_ascii()
+    |> Pfx.ok()
   end
 
   # DUMP nodes, accumulator is [ids, nodes, verts]
@@ -77,17 +77,21 @@ defmodule Iptrie.Dot do
   # TODO:
   #  add opts to color specific key(s) differently
   #  - perhaps an Iptrie with properties for drawing and using lpm match
-  def dotify(bst) do
-    [_ids, nodes, verts] =
-      Iptrie.traverse([[], [], []], fn n, x -> dump(n, x) end, bst, :postorder)
+  def dotify(bst, _title) do
+    [_ids, nodes, verts] = Rdx.traverse([[], [], []], fn n, x -> dump(n, x) end, bst, :postorder)
 
     body = Enum.join(nodes) <> "\n" <> Enum.join(verts)
+
+    # To add a title, include:
+    # label="#{title}";
 
     """
     digraph G {
 
+      labelloc="t";
       rankdir="TB";
-      ranksep="1.0 equally";
+      ranksep="0.5 equally";
+
 
       #{body}
     }
@@ -95,6 +99,6 @@ defmodule Iptrie.Dot do
   end
 
   def to_dotfile(bst, fname) do
-    File.write(fname, dotify(bst))
+    File.write(fname, dotify(bst, fname))
   end
 end

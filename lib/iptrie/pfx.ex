@@ -1,6 +1,6 @@
-defmodule Iptrie.Key do
+defmodule Iptrie.Pfx do
   @moduledoc """
-  Key-functions for the trie.
+  Functions to convert and/or manipulate IP prefixes.
 
   """
 
@@ -317,7 +317,7 @@ defmodule Iptrie.Key do
   end
 
   # Match keys:
-  # :default  key1 or key2 is a default matcher (i.e. a /0)
+  # :default  key1 or key2 is a default match(er) (i.e. a /0)
   # :nomatch  key1 and key2 have no match at all
   # :equal    key1 equals key2
   # :more     key1 is more specific than key2, same network address
