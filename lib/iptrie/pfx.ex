@@ -1,3 +1,26 @@
+defmodule Iptrie.PfxError do
+  defexception [:id, :detail]
+
+  @type t :: %__MODULE__{id: Atom.t(), detail: String.t()}
+
+  def new(id, detail),
+    do: %__MODULE__{id: id, detail: detail}
+
+  def message(x), do: format(x.id, x.detail)
+
+  def format(:eaddress, address),
+    do: "Bad address #{address}"
+
+  def format(:emask, detail),
+    do: "Bad mask #{detail}"
+
+  def format(:multi, {v1, v2}),
+    do: "Multiple reasons #{v1} -&- #{v2}"
+
+  def format(unknown, detail),
+    do: "Bad ultra: #{inspect({unknown, detail})}"
+end
+
 defmodule Iptrie.Pfx do
   @moduledoc """
   Functions to convert and/or manipulate IP prefixes.
@@ -5,11 +28,12 @@ defmodule Iptrie.Pfx do
   """
 
   use Bitwise
+  alias Iptrie.PfxError
 
   @ip4 <<0::1>>
   @ip6 <<1::1>>
 
-  # GUARDS-digits,len
+  # GUARDS
 
   defguard len4?(l) when is_integer(l) and l in 0..32
   defguard len6?(l) when is_integer(l) and l in 0..128
@@ -111,7 +135,13 @@ defmodule Iptrie.Pfx do
   end
 
   # TO_KEY (string,numbers)->key
+  def to_key(x) when is_exception(x), do: x
+
   def to_key(prefix) when is_binary(prefix) do
+    # prefix
+    # |> to_numbers()
+    # |> to_key()
+
     case to_numbers(prefix) do
       {:error, reason} -> {:error, reason}
       {:ok, nums} -> to_key(nums)
@@ -355,4 +385,25 @@ defmodule Iptrie.Pfx do
         :nomatch
     end
   end
+
+  def test_pfx(prefix) do
+    case String.split(prefix, "/", parts: 2) do
+      [addr] -> error(:eaddress, "Missing pfxlen in #{addr}")
+      [addr, ""] -> error(:eaddress, "Empty pfx len in #{addr}")
+      [addr | len] -> "addr #{addr}, len #{len}"
+      _ -> prefix
+    end
+  end
+
+  def test_pfx2(x) when is_exception(x), do: x
+
+  def test_pfx2(pfx) do
+    IO.puts("We got --> #{pfx}")
+  end
+
+  def test_pfx2!(x) when is_exception(x), do: raise(x)
+
+  @compile {:inline, error: 2}
+  defp error(id, detail),
+    do: PfxError.new(id, detail)
 end

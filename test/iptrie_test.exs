@@ -1,9 +1,9 @@
 defmodule IptrieTest do
   use ExUnit.Case
-  doctest Iptrie
+  doctest Iptrie, import: true
 
-  @ip4 <<0::1>>
-  @ip6 <<1::1>>
+  # @ip4 <<0::1>>
+  # @ip6 <<1::1>>
 
   setup do
     ex01 = [
@@ -54,7 +54,7 @@ defmodule IptrieTest do
     assert elem(Iptrie.lookup(t, "1.1.0.0"), 1) == "1.0.0.0/8"
   end
 
-  test "ex01 - same results with new(list) as add(list)", context do
+  test "ex01 - same results with new(list) as set(list)", context do
     # use new with shuffled order of insertion
     t = Iptrie.new(Enum.shuffle(context[:ex01]))
 
@@ -63,8 +63,8 @@ defmodule IptrieTest do
     assert elem(Iptrie.lookup(t, "1.0.1.0"), 1) == "1.0.0.0/16"
     assert elem(Iptrie.lookup(t, "1.1.0.0"), 1) == "1.0.0.0/8"
 
-    # use add with shuffled order of insertion, expect the same results
-    t = Iptrie.add(Iptrie.new(), Enum.shuffle(context[:ex01]))
+    # use set with shuffled order of insertion, expect the same results
+    t = Iptrie.new() |> Iptrie.set(Enum.shuffle(context[:ex01]))
 
     assert elem(Iptrie.lookup(t, "1.0.0.0"), 1) == "1.0.0.0/32"
     assert elem(Iptrie.lookup(t, "1.0.0.1"), 1) == "1.0.0.0/24"
