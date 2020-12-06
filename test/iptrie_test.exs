@@ -2,9 +2,6 @@ defmodule IptrieTest do
   use ExUnit.Case
   doctest Iptrie, import: true
 
-  # @ip4 <<0::1>>
-  # @ip6 <<1::1>>
-
   setup do
     ex01 = [
       # {pfx, data}, all more or less specifics

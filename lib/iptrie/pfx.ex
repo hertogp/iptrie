@@ -23,18 +23,33 @@ end
 
 defmodule Iptrie.Pfx do
   @moduledoc """
-  Functions to convert and/or manipulate IP prefixes.
+  Encode/decode IP prefixes to/from radix keys.
 
   """
 
   use Bitwise
   alias Iptrie.PfxError
 
-  @ip4 <<0::1>>
-  @ip6 <<1::1>>
+  @typedoc """
+  An IPv4/IPv6 marker, followed by 0 or more actual prefix bits.
+
+  For example: <<0, v4::bits>> or <<1, v6::bits>>
+
+  The marker helps to distinguish between prefix bitstrings encoded as radix
+  keys and regluar binaries.  This assumes the marker is unlikely to be used in
+  a regular string.
+
+  """
+  @type t :: <<_::8, _::_*1>>
+  @ip4 <<0::8>>
+  @ip6 <<1::8>>
 
   # GUARDS
 
+  @spec error?(any()) :: boolean()
+  defguard error?(x) when is_struct(x) and is_map_key(x, :__exception__)
+
+  @spec len4?(integer) :: boolean
   defguard len4?(l) when is_integer(l) and l in 0..32
   defguard len6?(l) when is_integer(l) and l in 0..128
 
@@ -58,149 +73,180 @@ defmodule Iptrie.Pfx do
                   elem(t, 6) in 0..65535 and
                   elem(t, 7) in 0..65535
 
-  defguard key4?(k)
-           when is_bitstring(k) and k < @ip6 and bit_size(k) < 34
+  defguard nums4?(digits, len) when ip4?(digits) and len4?(len)
+  defguard nums6?(digits, len) when ip6?(digits) and len6?(len)
 
-  defguard key6?(k)
-           when is_bitstring(k) and
-                  k > @ip4 and
-                  bit_size(k) < 130
+  defguard key4?(v, b) when v == @ip4 and bit_size(b) < 33
+  defguard key6?(v, b) when v == @ip6 and bit_size(b) < 129
+  defguard key?(v, b) when key4?(v, b) or key6?(v, b)
+  #
+  # Encode
+  #
+  @doc """
+  Encode a prefix as a bitstring with a IP version marker.
 
-  def ok({:ok, value}), do: value
-  def ok({:error, reason}), do: {:error, reason}
+  ## Examples
 
-  # TO_NUMBERS (string,key)->{:ok,{digits,len}}
+      iex> Iptrie.Pfx.encode("1.1.1.0/24")
+      <<0, 1, 1, 1>>
 
-  def to_numbers(prefix) when is_binary(prefix) do
-    [addr | len] = String.split(prefix, "/", parts: 2)
+      iex> Iptrie.Pfx.encode("acdc:1975::/32")
+      <<1, 0xacdc::16, 0x1975::16>>
 
-    case :inet.parse_address(String.to_charlist(addr)) do
-      {:error, _} -> {:error, :eaddress}
-      {:ok, digits} -> to_numbersp(digits, len)
+  """
+  def encode(x) when error?(x), do: x
+
+  # passthrough radix-encoded keys.  Error if marker is ok, but bits are not.
+  def encode(<<@ip4, addr::bits>> = pfx) when len4?(bit_size(addr)), do: pfx
+  def encode(<<@ip4, _::bits>> = pfx), do: error(:eaddress, "#{inspect(pfx)}")
+  def encode(<<@ip6, addr::bits>> = pfx) when len6?(bit_size(addr)), do: pfx
+  def encode(<<@ip6, _::bits>> = pfx), do: error(:eaddress, "#{inspect(pfx)}")
+
+  # by now, any binary should be a prefix in regular string form
+  # Integer.parse:
+  # - does not raise but yields either `:error` or `{num, "rest"}`
+  # - note that we insist on `"rest"` being an empty string.
+  def encode(pfx) when is_binary(pfx) do
+    {addr, len} =
+      pfx
+      |> String.split("/", parts: 2)
+      |> case do
+        [addr, len] -> {addr, Integer.parse(len)}
+        [addr] -> {addr, {-1, ""}}
+      end
+
+    digits =
+      addr
+      |> String.to_charlist()
+      |> :inet.parse_address()
+      |> case do
+        {:error, _} -> error(:eaddress, "#{pfx}")
+        {:ok, digits} -> digits
+      end
+
+    case {digits, len} do
+      {x, _} when error?(x) -> x
+      {_, :error} -> error(:emask, "#{pfx}")
+      {digits, {len, ""}} -> encode(digits, len)
+      _ -> error(:emask, "#{inspect(pfx)}")
     end
   end
 
-  def to_numbers(<<@ip4, addr::bitstring>>) when len4?(bit_size(addr)) do
-    len = bit_size(addr)
-    <<a::8, b::8, c::8, d::8>> = padright(addr, 32 - len)
-    {:ok, {{a, b, c, d}, len}}
-  end
+  def encode(digits, -1) when tuple_size(digits) == 4, do: encode(digits, 32)
+  def encode(digits, -1) when tuple_size(digits) == 8, do: encode(digits, 128)
 
-  def to_numbers(<<@ip6, addr::bitstring>>) when len6?(bit_size(addr)) do
-    len = bit_size(addr)
-    <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>> = padright(addr, 128 - len)
-    {:ok, {{a, b, c, d, e, f, g, h}, len}}
-  end
-
-  def to_numbers(_), do: {:error, :eaddress}
-
-  defp to_numbersp(digits, [len]) do
-    try do
-      to_numbersp(digits, String.to_integer(len))
-    rescue
-      ArgumentError -> {:error, :emask}
-    end
-  end
-
-  defp to_numbersp(digits, []) when ip4?(digits), do: to_numbersp(digits, 32)
-  defp to_numbersp(digits, []) when ip6?(digits), do: to_numbersp(digits, 128)
-
-  defp to_numbersp(digits, len) when is_integer(len) do
-    case tuple_size(digits) do
-      4 when len4?(len) -> {:ok, {digits, len}}
-      8 when len6?(len) -> {:ok, {digits, len}}
-      _ -> {:error, :emask}
-    end
-  end
-
-  defp to_numbersp(_, _), do: {:error, :eaddress}
-
-  # TO_BITS (string,key,numbers) -> bits
-
-  def to_bits(<<@ip4, addr::bitstring>>) when len4?(bit_size(addr)) do
-    bits = for <<(<<bit::1>> <- addr)>>, do: bit
-    {:ip4, List.to_tuple(bits), bit_size(addr)}
-  end
-
-  def to_bits(<<@ip6, addr::bitstring>>) when len6?(bit_size(addr)) do
-    bits = for <<(<<bit::1>> <- addr)>>, do: bit
-    {:ip6, List.to_tuple(bits), bit_size(addr)}
-  end
-
-  def to_bits(arg) do
-    case to_key(arg) do
-      {:ok, key} -> to_bits(key)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  # TO_KEY (string,numbers)->key
-  def to_key(x) when is_exception(x), do: x
-
-  def to_key(prefix) when is_binary(prefix) do
-    # prefix
-    # |> to_numbers()
-    # |> to_key()
-
-    case to_numbers(prefix) do
-      {:error, reason} -> {:error, reason}
-      {:ok, nums} -> to_key(nums)
-    end
-  end
-
-  def to_key({digits = {a, b, c, d}, len}) when ip4?(digits) and len4?(len) do
-    len = len + 1
-
+  def encode(digits = {a, b, c, d}, len) when nums4?(digits, len) do
+    len = len + bit_size(@ip4)
     <<key::bitstring-size(len), _::bitstring>> = <<@ip4, a::8, b::8, c::8, d::8>>
 
-    {:ok, key}
+    key
   end
 
-  def to_key({digits = {a, b, c, d, e, f, g, h}, len}) when ip6?(digits) and len6?(len) do
-    len = len + 1
+  def encode(digits = {a, b, c, d, e, f, g, h}, len) when nums6?(digits, len) do
+    len = len + bit_size(@ip6)
 
     <<key::bitstring-size(len), _::bitstring>> =
       <<@ip6, a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>>
 
-    {:ok, key}
+    key
   end
 
-  def to_key({digits, _}) when ip4?(digits) or ip6?(digits), do: {:error, :emask}
-  def to_key(_), do: {:error, :eaddress}
+  def encode(digits, len) when ip4?(digits) or ip6?(digits),
+    do: error(:emask, "#{inspect({digits, len})}")
 
-  # TO_ASCII (numbers,key)->string
+  def encode(digits, len), do: error(:eaddress, "#{inspect({digits, len})}")
 
-  def to_ascii(<<@ip4, addr::bitstring>>) when len4?(bit_size(addr)) do
+  #
+  # Decode(bits) :: nums
+  #
+  def decode(x) when error?(x), do: x
+
+  def decode(<<@ip4, addr::bitstring>>) when len4?(bit_size(addr)) do
     len = bit_size(addr)
     <<a::8, b::8, c::8, d::8>> = padright(addr, 32 - len)
-    to_ascii({{a, b, c, d}, len})
+    {{a, b, c, d}, len}
   end
 
-  def to_ascii(<<@ip6, addr::bitstring>>) when len6?(bit_size(addr)) do
+  def decode(<<@ip6, addr::bitstring>>) when len6?(bit_size(addr)) do
     len = bit_size(addr)
     <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>> = padright(addr, 128 - len)
-    to_ascii({{a, b, c, d, e, f, g, h}, len})
+    {{a, b, c, d, e, f, g, h}, len}
   end
 
-  def to_ascii({digits, len}) when ip4?(digits) and len4?(len) do
+  def decode({digits, len}) when ip4?(digits) or ip6?(digits),
+    do: error(:emask, "#{inspect({digits, len})}")
+
+  def decode(x),
+    do: error(:eaddress, "#{inspect(x)}")
+
+  #
+  # Format
+  #
+  def format(pfx, opts \\ [])
+
+  def format(x, _opts) when error?(x), do: IO.inspect(x, label: "format error!")
+
+  def format(<<v::binary-size(1), b::bitstring>> = pfx, opts) when key?(v, b),
+    do:
+      pfx
+      |> decode()
+      |> formatp(opts)
+
+  def format({digits, -1}, opts) when ip4?(digits),
+    do: formatp({digits, 32}, opts)
+
+  def format({digits, -1}, opts) when ip6?(digits),
+    do: formatp({digits, 128}, opts)
+
+  def format({digits, len}, opts) when nums4?(digits, len) or nums6?(digits, len),
+    do: formatp({digits, len}, opts)
+
+  # when the digits are good, it must be a bad mask
+  def format({digits, len}, _opts) when ip4?(digits) or ip6?(digits),
+    do: error(:emask, "#{inspect({digits, len})}")
+
+  # otherwise, it'll be a bad address
+  def format(x, _),
+    do: error(:eaddress, "#{inspect(x)}")
+
+  #
+  # formatp only called with valid digits,len
+  #
+  defp formatp({digits = {_, _, _, _}, len}, opts) do
+    mask = Keyword.get(opts, :mask, :cidr)
+
     case :inet.ntoa(digits) do
-      {:error, _} -> {:error, :eaddress}
-      address -> {:ok, "#{address}/#{len}"}
+      {:error, _} ->
+        error(:eaddress, "#{inspect({digits, len})}")
+
+      address ->
+        case mask do
+          :none -> "#{address}"
+          :dotted -> "#{address} #{format(<<@ip4, -1::size(len)>>, mask: :none)}"
+          _ -> "#{address}/#{len}"
+        end
     end
   end
 
-  def to_ascii({digits, len}) when ip6?(digits) and len6?(len) do
+  # for IPv6 the :dotted option is ignored
+  defp formatp({digits, len}, opts) do
+    mask = Keyword.get(opts, :mask, :cidr)
+
     case :inet.ntoa(digits) do
-      {:error, _} -> {:error, :eaddress}
-      address -> {:ok, "#{address}/#{len}"}
+      {:error, _} ->
+        error(:eaddress, "#{inspect({digits, len})}")
+
+      address ->
+        case mask do
+          :none -> "#{address}"
+          _ -> "#{address}/#{len}"
+        end
     end
   end
 
-  def to_ascii({digits, _}) when ip4?(digits) or ip6?(digits), do: {:error, :emask}
-  def to_ascii({:error, reason}), do: {:error, reason}
-  def to_ascii(_), do: {:error, :eaddress}
-
+  #
   # DECODE-helpers
+  #
 
   def padright(bits, len) when len > -1 do
     <<bits::bitstring, 0::size(len)>>
@@ -291,22 +337,6 @@ defmodule Iptrie.Pfx do
       _ -> {:error, :eaddress}
     end
   end
-
-  # BITPOS
-
-  def bitpos(key, pos) when key4?(key) or key6?(key) do
-    if bit_size(key) - 2 < pos do
-      0
-    else
-      <<_::1, _::bitstring-size(pos), bit::1, _::bitstring>> = key
-      bit
-    end
-  end
-
-  def bitpos(key, _) when key4?(key) or key6?(key),
-    do: {:error, :eindex}
-
-  def bitpos(_, _), do: {:error, :eaddress}
 
   # compare, used by Enum.sort/2 to sort {k,v}-pairs in {:desc, Iptrie.Key}-order
   # :eq  keys are equal

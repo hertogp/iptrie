@@ -15,11 +15,16 @@ defmodule Iptrie.Dot do
 
   # Helpers
 
-  defp to_ascii(key) do
+  defp decode(key) do
     key
-    |> Pfx.to_ascii()
-    |> Pfx.ok()
+    |> Pfx.format()
   end
+
+  # TODO:
+  # - add toplevel opts as keyword list
+  # - parameterize the graph options that are now hardcoded, like colors
+  # - optionally graph payload instead of key's, perhaps via callback that
+  #   takes a k,v-pair and produces a (short) string?
 
   # DUMP nodes, accumulator is [ids, nodes, verts]
   # A leaf:
@@ -58,7 +63,7 @@ defmodule Iptrie.Dot do
 
     body =
       leaf
-      |> Enum.map(fn x -> to_ascii(elem(x, 0)) end)
+      |> Enum.map(fn x -> decode(elem(x, 0)) end)
       |> Enum.map(fn x -> "  <TR><TD>#{x}</TD></TR>" end)
       |> Enum.join("\n  ")
 
@@ -84,6 +89,7 @@ defmodule Iptrie.Dot do
 
     # To add a title, include:
     # label="#{title}";
+    # in the docstring below
 
     """
     digraph G {
@@ -98,7 +104,7 @@ defmodule Iptrie.Dot do
     """
   end
 
-  def to_dotfile(bst, fname) do
+  def write(bst, fname) do
     File.write(fname, dotify(bst, fname))
   end
 end

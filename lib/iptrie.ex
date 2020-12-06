@@ -1,6 +1,6 @@
 defmodule Iptrie do
   @moduledoc """
-  An Ip lookup table for both IPv4 and IPv6.
+  A Key,Value-store for IPv4 and IPv6 in CIDR notation and longest prefix matching.
 
   Iptrie provides an interface to store, retrieve or modify prefix,value-pairs
   in an IP lookup table, where the prefix is a regular string like "1.1.1.0/30"
@@ -25,32 +25,32 @@ defmodule Iptrie do
       ...>])
       iex>
       iex> lookup(ipt, "acdc:1976:abba::")
-      {<<1::1, 0xacdc::16, 0x1976::16>>, "Jailbreak"}
+      {<<1::8, 0xacdc::16, 0x1976::16>>, "Jailbreak"}
       iex>
       iex> lookup(ipt, "1.1.1.3")
-      {<<0::1, 1::8, 1::8, 1::8, 0::6>>, "1.1.1.0/30"}
+      {<<0::8, 1::8, 1::8, 1::8, 0::6>>, "1.1.1.0/30"}
       iex>
       iex> lookup(ipt, "1.1.1.45")
-      {<<0::1, 1::8, 1::8, 1::8>>, "1.1.1.0/24"}
+      {<<0::8, 1::8, 1::8, 1::8>>, "1.1.1.0/24"}
       iex>
       iex> ipt
       {0,
-        {25,
-          {-1, [{<<0, 128, 128, 64::size(7)>>, "1.1.1.0/30"},
-            {<<0, 128, 128, 1::size(1)>>, "1.1.1.0/24"}]},
-          {-1, [{<<0, 128, 128, 127::size(7)>>, "1.1.1.252/30"}]}
-        },
-        {31,
-          {-1, [{<<214, 110, 12, 186, 1::size(1)>>, "High Voltage"}]},
-          {32, {-1, [{<<214, 110, 12, 187, 0::size(1)>>, "Jailbreak"}]},
-               {-1, [{<<214, 110, 12, 187, 1::size(1)>>, "Dog eat dog"}]}
-          }
-        }
+        {7, {32, {-1, [{<<0, 1, 1, 1, 0::size(6)>>, "1.1.1.0/30"},
+                       {<<0, 1, 1, 1>>, "1.1.1.0/24"}]},
+                 {-1, [{<<0, 1, 1, 1, 63::size(6)>>, "1.1.1.252/30"}]}
+            },
+            {38, {-1, [{<<1, 172, 220, 25, 117>>, "High Voltage"}]},
+                 {39, {-1, [{<<1, 172, 220, 25, 118>>, "Jailbreak"}]},
+                      {-1, [{<<1, 172, 220, 25, 119>>, "Dog eat dog"}]}}
+            }
+            },
+        nil
       }
       iex>
-      iex> Iptrie.Dot.dotify(ipt, "doc/img/example.dot")
+      iex> Iptrie.Dot.write(ipt, "doc/img/example.dot")
+      :ok
 
-  ![example2](img/example.dot.png)
+  ![example](img/example.dot.png)
 
   """
   alias Iptrie.Pfx
@@ -67,16 +67,19 @@ defmodule Iptrie do
 
   ## Examples
 
-      iex> ascii(<<0::1, 1::8, 1::8>>)
+      iex> ascii(<<0::8, 1::8, 1::8>>)
       "1.1.0.0/16"
 
-      iex> ascii(<<1::1, 0xacdc::16, 0x1979::16>>)
+      iex> ascii(<<1::8, 0xacdc::16, 0x1979::16>>)
       "acdc:1979::/32"
 
-      iex> ascii(<<0::1, 1::33>>)  # an IPv4 key with too many bits
-      {:error, :eaddress}
+      iex> ascii(<<0::8, 1::33>>)  # an IPv4 key with too many bits
+      %Iptrie.PfxError{id: :eaddress, detail: "<<0, 0, 0, 0, 0, 1::size(1)>>"}
   """
-  def ascii(key), do: Pfx.to_ascii(key) |> Pfx.ok()
+  def ascii(key),
+    do:
+      key
+      |> Pfx.format()
 
   # Api
   @doc """
@@ -101,8 +104,8 @@ defmodule Iptrie do
       iex> elements = [{"1.1.1.1", "1.1.1.1"}, {"1.1.1.0/30", "1.1.1.0/30"}]
       iex> new(elements)
       {0,
-        {32, {-1, [{<<0, 128, 128, 64::size(7)>>, "1.1.1.0/30"}]},
-             {-1, [{<<0, 128, 128, 128, 1::size(1)>>, "1.1.1.1"}]}
+        {39, {-1, [{<<0, 1, 1, 1, 0::size(6)>>, "1.1.1.0/30"}]},
+             {-1, [{<<0, 1, 1, 1, 1>>, "1.1.1.1"}]}
         },
         nil
       }
@@ -121,8 +124,8 @@ defmodule Iptrie do
       iex> new()
       ...> |> set([{"1.1.1.0/30", "1.1.1.0/30"}, {"1.1.1.1", "1.1.1.1"}])
       {0,
-        {32, {-1, [{<<0, 128, 128, 64::size(7)>>, "1.1.1.0/30"}]},
-             {-1, [{<<0, 128, 128, 128, 1::size(1)>>, "1.1.1.1"}]}
+        {39, {-1, [{<<0, 1, 1, 1, 0::size(6)>>, "1.1.1.0/30"}]},
+             {-1, [{<<0, 1, 1, 1, 1>>, "1.1.1.1"}]}
         },
         nil}
 
@@ -130,8 +133,10 @@ defmodule Iptrie do
       ...> |> set({"1.1.1.1", "1.1.1.1"})
       ...> |> set({"acdc::1976/16", "jailbreak"})
       {0,
-        {-1, [{<<0, 128, 128, 128, 1::size(1)>>, "1.1.1.1"}]},
-        {-1, [{<<214, 110, 0::size(1)>>, "jailbreak"}]}
+        {7, {-1, [{<<0, 1, 1, 1, 1>>, "1.1.1.1"}]},
+            {-1, [{<<1, 172, 220>>, "jailbreak"}]}
+        },
+        nil
       }
   """
   def set(tree, element_or_elements)
@@ -141,9 +146,9 @@ defmodule Iptrie do
   end
 
   def set(tree, {pfx, val}) do
-    case Pfx.to_key(pfx) do
-      {:ok, key} -> Rdx.set(tree, {key, val})
-      {:error, reason} -> {:error, reason}
+    case Pfx.encode(pfx) do
+      %PfxError{} = x -> x
+      key -> Rdx.set(tree, {key, val})
     end
   end
 
@@ -156,19 +161,22 @@ defmodule Iptrie do
 
       iex> table = new([{"1.1.1.1", "1.1.1.1"}, {"1.1.1.0/30", "1.1.1.0/30"}])
       iex> lookup(table, "1.1.1.3")
-      {<<0, 128, 128, 64::size(7)>>, "1.1.1.0/30"}
+      {<<0, 1, 1, 1, 0::size(6)>>, "1.1.1.0/30"}
+      iex>
+      iex> lookup(table, "1.1.1.1")
+      {<<0::8, 1::8, 1::8, 1::8, 1::8>>, "1.1.1.1"}
       iex>
       iex> lookup(table, "1.1.1.5")
       nil
-      iex>
-      iex> lookup(table, "1.1.1.1")
-      {<<0::1, 1::8, 1::8, 1::8, 1::8>>, "1.1.1.1"}
+      iex> lookup(table, "1.1.1.256")
+      %Iptrie.PfxError{id: :eaddress, detail: "1.1.1.256"}
+
 
   """
   def lookup(tree, key) do
-    case Pfx.to_key(key) do
-      {:ok, key} -> Rdx.lpm(tree, key)
-      {:error, reason} -> {:error, reason}
+    case Pfx.encode(key) do
+      %PfxError{} = x -> x
+      key -> Rdx.lpm(tree, key)
     end
   end
 end
