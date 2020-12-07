@@ -1,30 +1,33 @@
 defmodule Iptrie.RdxError do
   defexception [:id, :detail]
 
-  @type t :: %__MODULE__{id: Atom.t(), detail: String.t()}
+  @typedoc """
+  An RdxError exception struct for signalling errors.
+  """
+  @type t :: %__MODULE__{id: atom, detail: String.t()}
 
+  @spec new(atom, String.t()) :: t()
   def new(id, detail),
     do: %__MODULE__{id: id, detail: detail}
 
-  def message(x), do: format(x.id, x.detail)
+  @spec message(t()) :: String.t()
+  def message(t), do: format(t.id, t.detail)
 
-  def format(:eaddress, address),
+  defp format(:eaddress, address),
     do: "Bad address #{address}"
 
-  def format(:emask, detail),
+  defp format(:emask, detail),
     do: "Bad mask #{detail}"
 
-  def format(:multi, {v1, v2}),
+  defp format(:multi, {v1, v2}),
     do: "Multiple reasons #{v1} -&- #{v2}"
 
-  def format(unknown, detail),
+  defp format(unknown, detail),
     do: "Bad ultra: #{inspect({unknown, detail})}"
 end
 
 defmodule Iptrie.Rdx do
   # TODO:
-  # - all API-functions should yield either an :ok or an :error tuple
-  #   alternative: yield a value or :error-tuple
   # - hide functions internal to the Rdx module
   #   eg _get, _kvnew, _tree_pos
   # - rename match to something like: _leaf_action (and make it private)
@@ -49,9 +52,9 @@ defmodule Iptrie.Rdx do
   #
   #
   @moduledoc """
-  `Iptrie.Rdx` provides a path-compressed Patricia trie with one-way branching removed.
+  A path-compressed Patricia trie with one-way branching removed.
 
-  The radix tree has 2 types of nodes:
+  The radix tree (`r=2`)  has 2 types of nodes:
   - *internal* `{bit, left, right}`, where `bit` >= 0
   - *leaf*     `{-1, [{key,value} ..]}`
 
@@ -62,13 +65,18 @@ defmodule Iptrie.Rdx do
   - `key` is a bitstring used to index into the tree
   - `value` can be anything
 
-  The keys stored below any given internal node, or stored at a leaf, all
-  agree on the bits checked to arrive at that particular node.  A leaf stores
-  key,value-pairs in descending order of key-length and all keys in a leaf have
-  the shortest key as a common prefix.
+  The keys stored below any given `internal` node or in a `leaf` node, all
+  agree on the bits checked to arrive at that particular node.
+  Path-compression means not all bits in a key are checked on the way down,
+  only those that differentiate between keys stored below the current
+  `internal` node.  So a final match is needed to ensure a correct match.
 
-  Normally, the keys are bitstrings created from Ip prefixes, but they need not
-  be.  The `Iptrie` module Uses `Iptrie.Pfx` to convert prefixes to/from keys.
+  A `leaf` stores key,value-pairs in a list sorted in descending order of
+  key-length and all keys in a leaf have the shortest key as a common prefix.
+  This is how one-way branching is removed.
+
+  Normally, the keys are bitstrings created from Ip prefixes but any bitstring,
+  including binaries, can be used as keys.
 
   ## Examples
 
@@ -82,7 +90,7 @@ defmodule Iptrie.Rdx do
       iex> lpm(t, <<1::8, 1::8, 1::8, 3::8>>)
       {<<1::8, 1::8, 1::8, 0::6>>, "1.1.1.0/30"}
 
-  Keys donot have to be bitstrings, binaries work too:
+  Regular binaries work too:
 
       iex> t = new([{"hallo", 5}, {"hallooo", 7}])
       iex> lpm(t, "halloo")
@@ -103,14 +111,14 @@ defmodule Iptrie.Rdx do
   # Helpers
 
   # - run down the tree and return the kvs of a leaf (might be nil) based on key-path
-  def get(nil, _key), do: nil
+  defp get_leaf(nil, _key), do: nil
 
-  def get({-1, kvs}, _key), do: kvs
+  defp get_leaf({-1, kvs}, _key), do: kvs
 
-  def get({bit, l, r}, key) do
+  defp get_leaf({bit, l, r}, key) do
     case(bit(key, bit)) do
-      0 -> get(l, key)
-      1 -> get(r, key)
+      0 -> get_leaf(l, key)
+      1 -> get_leaf(r, key)
     end
   end
 
@@ -119,10 +127,10 @@ defmodule Iptrie.Rdx do
   # :update
 
   # ran into an empty leaf, so take it
-  def put(nil, _treepos, key, val), do: kvnew({key, val})
+  defp put(nil, _treepos, key, val), do: kvnew({key, val})
 
   # follow path, insert somewhere in the left/right subtree
-  def put({bit, l, r}, {pos, type}, key, val) when pos > bit do
+  defp put({bit, l, r}, {pos, type}, key, val) when pos > bit do
     case bit(key, bit) do
       0 -> {bit, put(l, {pos, type}, key, val), r}
       1 -> {bit, l, put(r, {pos, type}, key, val)}
@@ -130,7 +138,7 @@ defmodule Iptrie.Rdx do
   end
 
   # ran into a non-empty leaf.
-  def put({-1, leaf}, {pos, type}, key, val) do
+  defp put({-1, leaf}, {pos, type}, key, val) do
     case type do
       :split ->
         # split tree, new key decides if it goes left or right
@@ -150,7 +158,7 @@ defmodule Iptrie.Rdx do
   # pos <= bit and bit != -1, so at internal node
   # :nomatch means split the tree
   # :equal, :less, :more, :subnet, :supernet  means continue towards leaf
-  def put({bit, l, r}, {pos, type}, key, val) do
+  defp put({bit, l, r}, {pos, type}, key, val) do
     case type do
       :split ->
         # split the tree, the new key decides new left or right leaf
@@ -165,53 +173,44 @@ defmodule Iptrie.Rdx do
     end
   end
 
-  @doc """
-  Compare two keys and return one of `:eq`, `:lt` or `:gt`.
-
-  Used to sort a list of {k,v}-pairs in descending key-length order.
-  """
-
   # compare two {k,v}-pairs based on their keys
-  def compare({k1, _v1}, {k2, _v2}), do: compare(k1, k2)
+  # def compare({k1, _v1}, {k2, _v2}), do: compare(k1, k2)
 
-  # compare two keys directly
-  def compare(key1, key2) do
-    cond do
-      key1 == key2 -> :eq
-      bit_size(key1) < bit_size(key2) -> :lt
-      bit_size(key1) > bit_size(key2) -> :gt
-      key1 < key2 -> :lt
-      true -> :gt
-    end
-  end
+  # # compare two keys directly
+  # def compare(key1, key2) do
+  #   cond do
+  #     key1 == key2 -> :eq
+  #     bit_size(key1) < bit_size(key2) -> :lt
+  #     bit_size(key1) > bit_size(key2) -> :gt
+  #     key1 < key2 -> :lt
+  #     true -> :gt
+  #   end
+  # end
 
-  @doc """
-  Get the value of a bit in a given key.
+  # bit
+  # - extract the value of a bit in a key
+  # - bits beyond the key-length are considered `0`
+  defp bit(key, pos) when pos > bit_size(key) - 1, do: 0
 
-  Bits beyond the length of the key are considered to be 0.
-
-  """
-  def bit(key, pos) when pos > bit_size(key) - 1, do: 0
-
-  def bit(key, pos) do
+  defp bit(key, pos) do
     <<_::size(pos), bit::1, _::bitstring>> = key
     bit
   end
 
-  @doc """
-  Find the first bit where two keys differ
+  # diffbit
+  # - find the first bit where two keys differ
+  # - for two equal keys, the last bit position is returned.
+  # - returns the last bitpos if one key is a shorter prefix of the other
+  #   in which case they both should belong to the same leaf.
+  # The bit position is used to determine where a k,v-pair is stored in the tree
 
-  For two equal keys, the last bit position is returned.
-  In case one key is a shorter prefix of the other, the last bit position of
-  the longest key is returned.
-  """
-  # easily get diffbit for k,v-pair and a given key.
-  def diffbit([{k, _v} | _leaf], key), do: diffbit(0, k, key)
+  # for a k,v-list of a leaf, we only need to check the first/longest key
+  defp diffbit([{k, _v} | _leaf], key), do: diffbit(0, k, key)
 
-  def diffbit(k, key), do: diffbit(0, k, key)
+  defp diffbit(k, key), do: diffbit(0, k, key)
 
   # guards stop the recursion when longest key is exhausted
-  def diffbit(pos, k, key) when pos < bit_size(k) or pos < bit_size(key) do
+  defp diffbit(pos, k, key) when pos < bit_size(k) or pos < bit_size(key) do
     case bit(key, pos) == bit(k, pos) do
       true -> diffbit(pos + 1, k, key)
       false -> pos
@@ -219,68 +218,73 @@ defmodule Iptrie.Rdx do
   end
 
   # keep pos if outside both keys
-  def diffbit(pos, _key1, _key2), do: pos
-
-  @doc """
-  Match a candidate key to the keys of a leaf.  If the candidate does not share
-  a common prefix with the longest key in the leaf, a new leaf must be created.
-  Otherwise, if the key is nog yet present it can be added or the leaf updated
-  if the candidate already exists in the leaf.
-  """
-  def match([], _k2), do: :add
-
-  def match([{k1, _v} | _], k2) when k1 == k2, do: :update
-
-  def match([{k1, _v} | tail], k2) do
-    pad1 = max(0, bit_size(k2) - bit_size(k1))
-    pad2 = max(0, bit_size(k1) - bit_size(k2))
-
-    case <<k1::bitstring, 0::size(pad1)>> == <<k2::bitstring, 0::size(pad2)>> do
-      true -> match(tail, k2)
-      false -> :split
-    end
-  end
+  defp diffbit(pos, _key1, _key2), do: pos
 
   # get key's position in the tree: {bitpos, match-type}
-  def tree_pos(bst, key) do
-    case get(bst, key) do
+  defp tree_pos(bst, key) do
+    case get_leaf(bst, key) do
       nil ->
         {bit_size(key) - 1, :nomatch}
 
       leaf ->
-        {diffbit(leaf, key), match(leaf, key)}
+        {diffbit(leaf, key), kvmatch(leaf, key)}
     end
   end
 
-  def kvnew({k, v}), do: {-1, [{k, v}]}
-  def kvnew(l) when is_list(l), do: {-1, Enum.sort(l, {:desc, Iptrie.Rdx})}
+  # kvmatch
+  # - match a candidate key against the keys of a leaf, yields one of:
+  # :update if the candidate key is already present in the leaf
+  # :add    if the candidate shares the leaf's common prefix
+  # :split  if the candidate does not share the leaf's common prefix
+  # - note we run through the entire list in order to detect k1==k2
+  # - TODO: we can cut short when the leaf's key is shorter than the new key
+  #   1/30, 1/24, 1/16, 1/8: when checking for 1/25 and we see 1/24 we know
+  #   the 1/25 key can be added and there's no point in checking further.
+  defp kvmatch([], _k2), do: :add
 
-  @doc """
-  Get the first k,v-pair that matches as a prefix of `key` from a list of
-  k,v-pairs.
+  defp kvmatch([{k1, _v} | _], k2) when k1 == k2, do: :update
 
-  If the list is sorted on key-length in descending order, the longest match
-  will be returned.
+  defp kvmatch([{k1, _v} | tail], k2) do
+    # expands the smallest key to match size of larget key
+    # when that matches one key is a prefix of the other key
+    pad1 = max(0, bit_size(k2) - bit_size(k1))
+    pad2 = max(0, bit_size(k1) - bit_size(k2))
 
-      iex> kv_list = [{"11000", 5}, {"110", 3}]
-      iex>
-      iex> kvget(kv_list, "1100")
-      ...> {"110", 3}
-      iex>
-      iex> kvget(kv_list, "110000000")
-      ...> {"11000", 5}
-  """
-  def kvget([], _key), do: nil
-  def kvget([{k, _v} | tail], key) when bit_size(k) > bit_size(key), do: kvget(tail, key)
-  def kvget([{k, v} | _tail], key) when k == key, do: {k, v}
+    case <<k1::bitstring, 0::size(pad1)>> == <<k2::bitstring, 0::size(pad2)>> do
+      true -> kvmatch(tail, k2)
+      false -> :split
+    end
+  end
 
-  def kvget([{k, v} | tail], key) do
+  # create new k,v-pair list for a leaf
+  # TODO: should return only the list, not the leaf
+  # `-> refactor calls to this function
+  defp kvnew({k, v}), do: {-1, [{k, v}]}
+  defp kvnew(l) when is_list(l), do: {-1, Enum.sort(l, &kvsort/2)}
+
+  # kvget
+  # - get first k,v-pair of a leaf that matches as a prefix of `key`
+  # - list is sorted on key-length in descending order -> gets the longest match
+  defp kvget([], _key), do: nil
+  defp kvget([{k, _v} | tail], key) when bit_size(k) > bit_size(key), do: kvget(tail, key)
+  defp kvget([{k, v} | _tail], key) when k == key, do: {k, v}
+
+  defp kvget([{k, v} | tail], key) do
     len = bit_size(k)
     <<key::bitstring-size(len), _::bitstring>> = key
 
     case k == key do
       true -> {k, v}
       false -> kvget(tail, key)
+    end
+  end
+
+  # helper to sort leaf k,v-pairs on bit_size(k) in descending order
+  defp kvsort({k1, _v1}, {k2, _v2}) do
+    cond do
+      k1 == k2 -> true
+      bit_size(k1) < bit_size(k2) -> false
+      true -> true
     end
   end
 
