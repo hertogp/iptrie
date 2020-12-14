@@ -263,7 +263,7 @@ defmodule Iptrie.Rdx do
   defp kvnew(l) when is_list(l), do: {-1, Enum.sort(l, &kvsort/2)}
 
   # kvget
-  # - get first k,v-pair of a leaf that matches as a prefix of `key`
+  # - get first k,v-pair of a leaf where `k` is a prefix of `key`
   # - list is sorted on key-length in descending order -> gets the longest match
   defp kvget([], _key), do: nil
   defp kvget([{k, _v} | tail], key) when bit_size(k) > bit_size(key), do: kvget(tail, key)
@@ -298,7 +298,7 @@ defmodule Iptrie.Rdx do
   end
 
   @doc """
-  Update or insert key-value pair(s) in the iptrie.
+  Update or insert key-value pair(s) in the iptrie, using an *exact* match.
 
   ## Example
 

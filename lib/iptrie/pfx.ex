@@ -27,15 +27,12 @@ end
 
 defmodule Iptrie.Pfx do
   @moduledoc """
-  Functions to encode/decode IP prefixes to/from `t:pfx/0`-bitstrings, and then some.
+  Functions to encode/decode IP prefixes and reason with them.
 
-  All functions yields an `t:Iptrie.PfxError.t/0` in case of any error seen,
-  otherwise the calculated value is returned.
+  All functions simply return their calculated value or an exception struct
+  (`t:Iptrie.PfxError.t/0`) in case of any errors .  These functions also
+  passthrough any expections which makes pipelining them a bit easier.
 
-  Main functions include:
-  - `Iptrie.Pfx.encode/1`, to encode a prefix into `t:pfx/0`-bitstring
-  - `Iptrie.Pfx.decode/1`, to decode a prefix into `t:dig/0`-tuple
-  - `Iptrie.Pfx.format/2`, to format a prefix into a regular `t:String.t/0`.
 
   """
 
@@ -46,11 +43,11 @@ defmodule Iptrie.Pfx do
   An IP prefix in bitstring-format: an 8bit protocol marker, followed by zero
   or more network bits.
 
-  For example: <<0, v4_max_32::bits>> or <<1, v6_max_128::bits>>
+  For example: <<0, v4_network::bits>> or <<1, v6_network::bits>>
 
   The marker identifies the protocol (v4 vs v6) and also helps to differentiate
   between a prefix bitstring and a regular binary.  The latter is the reason
-  the marker is 8 bits instead of 1 bit.
+  the marker is 8 bits instead of just 1 bit.
 
   """
   @type pfx :: <<_::8, _::_*1>>
@@ -108,8 +105,57 @@ defmodule Iptrie.Pfx do
   defguardp key?(v, b) when key4?(v, b) or key6?(v, b)
 
   #
-  # Encode
+  # Helpers
   #
+
+  # padright
+  # - append zero or more bits to a bitstring until desired length is reached
+  # - set invert=true to append `1`-bits instead of `0`-bits
+  @spec padright(bitstring, non_neg_integer, boolean) :: bitstring
+  def padright(bits, nbits, inverted \\ false)
+
+  def padright(bits, nbits, _inverted = false) when bit_size(bits) < nbits do
+    pad = nbits - bit_size(bits)
+    <<bits::bitstring, 0::size(pad)>>
+  end
+
+  def padright(bits, nbits, _inverted = true) when bit_size(bits) < nbits do
+    pad = nbits - bit_size(bits)
+    <<bits::bitstring, -1::size(pad)>>
+  end
+
+  # padleft
+  # - prepend zero or more bits to a bitstring.
+  # - set invert=true to prepend `1`-bits instead of `0`-bites
+  @spec padleft(bitstring, non_neg_integer, boolean) :: bitstring
+  def padleft(bits, nbits, invert \\ false)
+
+  def padleft(bits, nbits, _invert = false) when bit_size(bits) < nbits do
+    pad = nbits - bit_size(bits)
+    <<0::size(pad), bits::bitstring>>
+  end
+
+  def padleft(bits, nbits, _invert = true) when bit_size(bits) < nbits do
+    pad = nbits - bit_size(bits)
+    <<-1::size(pad), bits::bitstring>>
+  end
+
+  #
+  # Error Exception creation
+  #
+
+  @compile {:inline, error: 2}
+  defp error(id, detail),
+    do: PfxError.new(id, detail)
+
+  #
+  # API
+  #
+  # TODO:
+  # Implement Enumerable protocol for a prefix %Prefix{proto: :ip4, <<bits>>}
+  # Perhaps something similar to the Range type.
+  # iex> Enumerable.reduce(0..5, {:cont, []}, fn x, acc -> {:cont, [IO.inspect(x) | IO.inspect(acc)]} end) |> elem(1) |> Enum.reverse()
+  # Encode
 
   @doc """
   Encode an IP prefix into a `t:pfx/0`-bitstring.
@@ -125,18 +171,18 @@ defmodule Iptrie.Pfx do
       iex> Iptrie.Pfx.encode("1.1.1.0/24")
       <<0, 1, 1, 1>>
 
-      # absent mask defaults to max mask for the protocol used
-      iex> Iptrie.Pfx.encode("1.1.1.0")
-      <<0, 1, 1, 1, 0>>
-
       iex> Iptrie.Pfx.encode({{1,1,1,1}, 24})
       <<0, 1, 1, 1>>
 
       iex> Iptrie.Pfx.encode(<<0, 1, 1, 1>>)
       <<0, 1, 1, 1>> # pass though valid bitstrings
 
-      iex> Iptrie.Pfx.encode(<<1, 0xacdc::16, 0x1975::16>>)
+      iex> Iptrie.Pfx.encode("acdc:1975::/32")
       <<1, 0xacdc::16, 0x1975::16>>
+
+      # absent mask defaults to max mask for the protocol used
+      iex> Iptrie.Pfx.encode("1.1.1.0")
+      <<0, 1, 1, 1, 0>>
 
       # one bit too many for an IPv4 prefix-bitstring
       iex> Iptrie.Pfx.encode(<<0, 1, 1, 1, 1, 0::1>>)
@@ -152,7 +198,7 @@ defmodule Iptrie.Pfx do
 
   """
   @spec encode(PfxError.t() | String.t() | pfx() | dig()) :: PfxError.t() | pfx()
-  def encode(pfx) when error?(pfx), do: pfx
+  def encode(prefix) when error?(prefix), do: prefix
 
   # passthrough valid pfx-bitstrings, error out on invalid pfx-bitstrings
   def encode(<<@ip4, addr::bits>> = pfx) when len4?(bit_size(addr)), do: pfx
@@ -236,24 +282,22 @@ defmodule Iptrie.Pfx do
       iex> Iptrie.Pfx.decode({{1, 1, 1, 0}, 16})
       {{1, 1, 1, 0}, 16}
 
-      # one bit too many
+      # and a bit too much
       iex> Iptrie.Pfx.decode(<<0, 1, 1, 1, 1, 1::size(1)>>)
       %Iptrie.PfxError{id: :eaddress, detail: "<<0, 1, 1, 1, 1, 1::size(1)>>"}
 
   """
-  @spec decode(PfxError.t() | pfx() | dig()) :: dig()
-  def decode(pfx) when error?(pfx), do: pfx
+  @spec decode(pfx() | dig()) :: dig()
+  def decode(prefix) when error?(prefix), do: prefix
 
   def decode(<<@ip4, addr::bitstring>>) when len4?(bit_size(addr)) do
-    len = bit_size(addr)
-    <<a::8, b::8, c::8, d::8>> = padright(addr, 32 - len)
-    {{a, b, c, d}, len}
+    <<a::8, b::8, c::8, d::8>> = padright(addr, 32)
+    {{a, b, c, d}, bit_size(addr)}
   end
 
   def decode(<<@ip6, addr::bitstring>>) when len6?(bit_size(addr)) do
-    len = bit_size(addr)
-    <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>> = padright(addr, 128 - len)
-    {{a, b, c, d, e, f, g, h}, len}
+    <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>> = padright(addr, 128)
+    {{a, b, c, d, e, f, g, h}, bit_size(addr)}
   end
 
   def decode({digits, len}) when dig4?(digits, len) or dig6?(digits, len),
@@ -362,63 +406,6 @@ defmodule Iptrie.Pfx do
     end
   end
 
-  # DECODE-helpers
-
-  @doc """
-  Append zero or more bits to a bitstring.
-
-  By default, `0`-bits are appended unless the optional third argument `invert`
-  is true, in which case `1`-bits are appended.
-
-  ## Examples
-      iex> Iptrie.Pfx.padright(<<0, 1, 1, 1>>, 8)
-      <<0, 1, 1, 1, 0>>
-
-      iex> Iptrie.Pfx.padright(<<0, 1, 1, 1>>, 8, true)
-      <<0, 1, 1, 1, 255>>
-
-      iex> <<0>>
-      ...> |> Iptrie.Pfx.padright(24, true)
-      ...> |> Iptrie.Pfx.format(mask: :none)
-      "255.255.255.0"
-  """
-  @spec padright(bitstring, non_neg_integer, boolean) :: bitstring
-  def padright(bits, nbits, invert \\ false) when nbits > -1 do
-    case invert do
-      false -> <<bits::bitstring, 0::size(nbits)>>
-      true -> <<bits::bitstring, -1::size(nbits)>>
-    end
-  end
-
-  @doc """
-  Prepend zero or more bits to a bitstring.
-
-  By default, `0`-bits are prepended unless the optional third argument `invert`
-  is true, in which case `1`-bits are prepended.
-
-  ## Examples
-      iex> Iptrie.Pfx.padleft(<<0, 1, 1, 1>>, 8)
-      <<0, 0, 1, 1, 1>>
-
-      # note any special meaning of the first byte (if any) is ignored!
-      iex> Iptrie.Pfx.padleft(<<0, 1, 1, 1>>, 8, true)
-      <<255, 0, 1, 1, 1>>
-
-      iex> <<>>
-      ...> |> Iptrie.Pfx.padleft(129, true)
-      ...> |> Iptrie.Pfx.padleft(7)
-      ...> |> Iptrie.Pfx.format()
-      "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128"
-
-  """
-  @spec padleft(bitstring, non_neg_integer, boolean) :: bitstring
-  def padleft(bits, nbits, invert \\ false) when nbits > -1 do
-    case invert do
-      false -> <<0::size(nbits), bits::bitstring>>
-      true -> <<-1::size(nbits), bits::bitstring>>
-    end
-  end
-
   # OFFSET
 
   def offset(<<v::1, addr::bitstring>>, offset) do
@@ -442,27 +429,18 @@ defmodule Iptrie.Pfx do
     end
   end
 
-  # BIT
+  @doc """
+  Returns an atom indicating the adress family for `prefix` or
+  an exception struct on any error.
 
-  @spec bit(Iptrie.PfxError.t() | pfx(), integer) :: integer
-  def bit({:error, reason}, _), do: {:error, reason}
-
-  def bit(<<v::1, _::bitstring>>, pos) when pos == 0, do: v
-
-  def bit(key, pos) when pos > bit_size(key) - 1, do: 0
-
-  def bit(key, pos) when pos >= 0 do
-    <<_::size(pos), bit::1, _::bitstring>> = key
-    bit
-  end
-
-  def af_family(<<v::1, bits::bitstring>>) do
-    case v do
-      0 when bit_size(bits) < 33 -> :ip4
-      1 when bit_size(bits) < 129 -> :ip6
-      _ -> {:error, :eaddress}
-    end
-  end
+  """
+  @spec af_family(pfx() | dig()) :: :ip4 | :ip6 | PfxError.t()
+  def af_family(prefix) when error?(prefix), do: prefix
+  def af_family(<<@ip4, bits::bits>>) when size4?(bits), do: :ip4
+  def af_family(<<@ip6, bits::bits>>) when size6?(bits), do: :ip6
+  def af_family({digits, len}) when dig4?(digits, len), do: :ip4
+  def af_family({digits, len}) when dig6?(digits, len), do: :ip6
+  def af_family(x), do: error(:eaddress, "#{inspect(x)}")
 
   # compare, used by Enum.sort/2 to sort {k,v}-pairs in {:desc, Iptrie.Key}-order
   # :eq  keys are equal
@@ -479,27 +457,6 @@ defmodule Iptrie.Pfx do
       key1 < key2 -> :lt
       true -> :gt
     end
-  end
-
-  # get position of the first different bit in both keys
-  def diffbit(key1, key2) do
-    diffbit(0, key1, key2)
-  end
-
-  def diffbit(pos, key1, key2) when pos < bit_size(key1) or pos < bit_size(key2) do
-    if bit(key1, pos) != bit(key2, pos), do: pos, else: diffbit(pos + 1, key1, key2)
-  end
-
-  def diffbit(pos, _key1, _key2), do: pos
-
-  # get pos of the last different bit in both keys
-  def diffbit_last(key1, key2) do
-    max(bit_size(key1), bit_size(key2))
-    |> diffbit_last(key1, key2)
-  end
-
-  def diffbit_last(pos, key1, key2) do
-    if bit(key1, pos) != bit(key2, pos), do: pos, else: diffbit_last(pos - 1, key1, key2)
   end
 
   # Match keys:
@@ -520,8 +477,7 @@ defmodule Iptrie.Pfx do
 
     case k1 == key2 do
       true ->
-        pad = bit_size(key1) - len
-        if padright(key2, pad) == key1, do: :more, else: :subnet
+        if padright(key2, bit_size(key1)) == key1, do: :more, else: :subnet
 
       false ->
         :nomatch
@@ -534,32 +490,10 @@ defmodule Iptrie.Pfx do
 
     case k2 == key1 do
       true ->
-        pad = bit_size(key2) - len
-        if padright(key1, pad) == key2, do: :less, else: :supernet
+        if padright(key1, bit_size(key2)) == key2, do: :less, else: :supernet
 
       false ->
         :nomatch
     end
   end
-
-  def test_pfx(prefix) do
-    case String.split(prefix, "/", parts: 2) do
-      [addr] -> error(:eaddress, "Missing pfxlen in #{addr}")
-      [addr, ""] -> error(:eaddress, "Empty pfx len in #{addr}")
-      [addr | len] -> "addr #{addr}, len #{len}"
-      _ -> prefix
-    end
-  end
-
-  def test_pfx2(x) when is_exception(x), do: x
-
-  def test_pfx2(pfx) do
-    IO.puts("We got --> #{pfx}")
-  end
-
-  def test_pfx2!(x) when is_exception(x), do: raise(x)
-
-  @compile {:inline, error: 2}
-  defp error(id, detail),
-    do: PfxError.new(id, detail)
 end
