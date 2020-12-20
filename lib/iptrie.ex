@@ -8,7 +8,7 @@ defmodule Iptrie do
 
   It uses `Iptrie.Pfx` to convert prefixes between their string- and bitstring
   formats which are used as keys to index into a radix tree (r=2), as provided
-  by the `Iptrie.Rdx` module.
+  by the `Radix` module.
 
   By convention,  *pfx* refers to a prefix in its string-form, while *key*
   refers to the bitstring-encoded form as used by the radix tree.
@@ -53,12 +53,12 @@ defmodule Iptrie do
   ![example](img/example.dot.png)
 
   """
-  alias Iptrie.Pfx
-  alias Iptrie.PfxError
-  alias Iptrie.Rdx
+  alias Prefix.IP
+  alias PrefixError
+  alias Radix
 
   # TODO
-  # - use pfx instead of key(s), the latter is used in Rdx only
+  # - use pfx instead of key(s), the latter is used in Radix only
 
   # HELPERS
 
@@ -74,12 +74,12 @@ defmodule Iptrie do
       "acdc:1979::/32"
 
       iex> ascii(<<0::8, 1::33>>)  # an IPv4 key with too many bits
-      %Iptrie.PfxError{id: :eaddress, detail: "<<0, 0, 0, 0, 0, 1::size(1)>>"}
+      %PrefixError{id: :eaddress, detail: "<<0, 0, 0, 0, 0, 1::size(1)>>"}
   """
   def ascii(key),
     do:
       key
-      |> Pfx.format()
+      |> IP.format()
 
   # Api
   @doc """
@@ -91,7 +91,7 @@ defmodule Iptrie do
       {0, nil, nil}
 
   """
-  def new, do: Rdx.new()
+  def new, do: Radix.new()
 
   @doc """
   Create a new Iptrie populated with the given list of prefix-value pairs.
@@ -112,7 +112,7 @@ defmodule Iptrie do
 
   """
   def new(elements) when is_list(elements) do
-    Enum.reduce(elements, Rdx.new(), fn elm, t -> set(t, elm) end)
+    Enum.reduce(elements, Radix.new(), fn elm, t -> set(t, elm) end)
   end
 
   # for convenience: add a list of [{k,v},...] to a tree
@@ -146,9 +146,9 @@ defmodule Iptrie do
   end
 
   def set(tree, {pfx, val}) do
-    case Pfx.encode(pfx) do
-      %PfxError{} = x -> x
-      key -> Rdx.set(tree, {key, val})
+    case IP.encode(pfx) do
+      %PrefixError{} = x -> x
+      key -> Radix.set(tree, {key, val})
     end
   end
 
@@ -169,14 +169,14 @@ defmodule Iptrie do
       iex> lookup(table, "1.1.1.5")
       nil
       iex> lookup(table, "1.1.1.256")
-      %Iptrie.PfxError{id: :eaddress, detail: "1.1.1.256"}
+      %PrefixError{id: :eaddress, detail: "1.1.1.256"}
 
 
   """
   def lookup(tree, key) do
-    case Pfx.encode(key) do
-      %PfxError{} = x -> x
-      key -> Rdx.lpm(tree, key)
+    case IP.encode(key) do
+      %PrefixError{} = x -> x
+      key -> Radix.lpm(tree, key)
     end
   end
 end

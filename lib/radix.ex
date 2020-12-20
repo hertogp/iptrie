@@ -1,8 +1,8 @@
-defmodule Iptrie.RdxError do
+defmodule RadixError do
   defexception [:id, :detail]
 
   @typedoc """
-  An RdxError exception struct for signalling errors.
+  An RadixError exception struct for signalling errors.
   """
   @type t :: %__MODULE__{id: atom, detail: String.t()}
 
@@ -26,9 +26,9 @@ defmodule Iptrie.RdxError do
     do: "Bad ultra: #{inspect({unknown, detail})}"
 end
 
-defmodule Iptrie.Rdx do
+defmodule Radix do
   # TODO:
-  # - hide functions internal to the Rdx module
+  # - hide functions internal to the Radix module
   #   eg _get, _kvnew, _tree_pos
   # - rename match to something like: _leaf_action (and make it private)
   # - `all` -> returns all matches
@@ -104,7 +104,7 @@ defmodule Iptrie.Rdx do
 
   """
 
-  alias Iptrie.RdxError
+  alias RadixError
 
   @empty {0, nil, nil}
 
@@ -395,5 +395,5 @@ defmodule Iptrie.Rdx do
 
   @compile {:inline, error: 2}
   defp error(id, detail),
-    do: RdxError.new(id, detail)
+    do: RadixError.new(id, detail)
 end

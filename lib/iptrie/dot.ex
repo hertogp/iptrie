@@ -4,8 +4,8 @@ defmodule Iptrie.Dot do
 
   """
 
-  alias Iptrie.Pfx
-  alias Iptrie.Rdx
+  alias Prefix.IP
+  alias Radix
 
   @color %{
     root: "orange",
@@ -17,7 +17,7 @@ defmodule Iptrie.Dot do
 
   defp decode(key) do
     key
-    |> Pfx.format()
+    |> IP.format()
   end
 
   # TODO:
@@ -83,7 +83,8 @@ defmodule Iptrie.Dot do
   #  add opts to color specific key(s) differently
   #  - perhaps an Iptrie with properties for drawing and using lpm match
   def dotify(bst, _title) do
-    [_ids, nodes, verts] = Rdx.traverse([[], [], []], fn n, x -> dump(n, x) end, bst, :postorder)
+    [_ids, nodes, verts] =
+      Radix.traverse([[], [], []], fn n, x -> dump(n, x) end, bst, :postorder)
 
     body = Enum.join(nodes) <> "\n" <> Enum.join(verts)
 

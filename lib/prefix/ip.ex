@@ -1,43 +1,12 @@
-defmodule Iptrie.PfxError do
-  defexception [:id, :detail]
-
-  @typedoc """
-  Exception struct with members `id: atom` and `detail: String.t()`
-
-  """
-  @type t :: %__MODULE__{id: atom(), detail: String.t()}
-
-  def new(id, detail),
-    do: %__MODULE__{id: id, detail: detail}
-
-  def message(x), do: format(x.id, x.detail)
-
-  def format(:eaddress, address),
-    do: "Bad address #{address}"
-
-  def format(:emask, detail),
-    do: "Bad mask #{detail}"
-
-  def format(:multi, {v1, v2}),
-    do: "Multiple reasons #{v1} -&- #{v2}"
-
-  def format(unknown, detail),
-    do: "Bad ultra: #{inspect({unknown, detail})}"
-end
-
-defmodule Iptrie.Pfx do
+defmodule Prefix.IP do
   @moduledoc """
-  Functions to encode/decode IP prefixes and reason with them.
-
-  All functions simply return their calculated value or an exception struct
-  (`t:Iptrie.PfxError.t/0`) in case of any errors .  These functions also
-  passthrough any expections which makes pipelining them a bit easier.
-
+  Functions to encode/decode IP prefixes.
 
   """
 
   use Bitwise
-  alias Iptrie.PfxError
+  import Prefix
+  alias PrefixError
 
   @typedoc """
   An IP prefix in bitstring-format: an 8bit protocol marker, followed by zero
@@ -50,7 +19,7 @@ defmodule Iptrie.Pfx do
   the marker is 8 bits instead of just 1 bit.
 
   """
-  @type pfx :: <<_::8, _::_*1>>
+  @type t :: <<_::8, _::_*1>>
   @typep dig4 :: {{0..255, 0..255, 0..255, 0..255}, -1..32}
   @typep dig6 ::
            {{0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535},
@@ -66,8 +35,6 @@ defmodule Iptrie.Pfx do
   @ip6 <<1::8>>
 
   # GUARDS
-
-  defguardp error?(x) when is_struct(x) and is_map_key(x, :__exception__)
 
   # guards for {digits, len}, -1 denotes absence of mask
   defguardp len4?(l) when is_integer(l) and l in -1..32
@@ -104,50 +71,7 @@ defmodule Iptrie.Pfx do
   defguardp key6?(v, b) when v == @ip6 and size6?(b)
   defguardp key?(v, b) when key4?(v, b) or key6?(v, b)
 
-  #
-  # Helpers
-  #
-
-  # padright
-  # - append zero or more bits to a bitstring until desired length is reached
-  # - set invert=true to append `1`-bits instead of `0`-bits
-  @spec padright(bitstring, non_neg_integer, boolean) :: bitstring
-  def padright(bits, nbits, inverted \\ false)
-
-  def padright(bits, nbits, _inverted = false) when bit_size(bits) < nbits do
-    pad = nbits - bit_size(bits)
-    <<bits::bitstring, 0::size(pad)>>
-  end
-
-  def padright(bits, nbits, _inverted = true) when bit_size(bits) < nbits do
-    pad = nbits - bit_size(bits)
-    <<bits::bitstring, -1::size(pad)>>
-  end
-
-  # padleft
-  # - prepend zero or more bits to a bitstring.
-  # - set invert=true to prepend `1`-bits instead of `0`-bites
-  @spec padleft(bitstring, non_neg_integer, boolean) :: bitstring
-  def padleft(bits, nbits, invert \\ false)
-
-  def padleft(bits, nbits, _invert = false) when bit_size(bits) < nbits do
-    pad = nbits - bit_size(bits)
-    <<0::size(pad), bits::bitstring>>
-  end
-
-  def padleft(bits, nbits, _invert = true) when bit_size(bits) < nbits do
-    pad = nbits - bit_size(bits)
-    <<-1::size(pad), bits::bitstring>>
-  end
-
-  #
-  # Error Exception creation
-  #
-
-  @compile {:inline, error: 2}
-  defp error(id, detail),
-    do: PfxError.new(id, detail)
-
+  defp error(id, details), do: PrefixError.new(id, details)
   #
   # API
   #
@@ -164,41 +88,27 @@ defmodule Iptrie.Pfx do
   `t:dig/0`-tuple.  Any `t:pfx/0`-bitstrings that are valid are passed
   through, as are any exceptions.
 
-  Returns a `t:pfx/0` on success, an `t:Iptrie.PfxError.t/0` otherwise.
+  Returns a `t:pfx/0` on success, an `t:PrefixError.t/0` otherwise.
 
   ## Examples
 
-      iex> Iptrie.Pfx.encode("1.1.1.0/24")
+      iex> Prefix.encode("1.1.1.0/24")
       <<0, 1, 1, 1>>
-
-      iex> Iptrie.Pfx.encode({{1,1,1,1}, 24})
-      <<0, 1, 1, 1>>
-
-      iex> Iptrie.Pfx.encode(<<0, 1, 1, 1>>)
-      <<0, 1, 1, 1>> # pass though valid bitstrings
-
-      iex> Iptrie.Pfx.encode("acdc:1975::/32")
-      <<1, 0xacdc::16, 0x1975::16>>
-
-      # absent mask defaults to max mask for the protocol used
-      iex> Iptrie.Pfx.encode("1.1.1.0")
-      <<0, 1, 1, 1, 0>>
 
       # one bit too many for an IPv4 prefix-bitstring
-      iex> Iptrie.Pfx.encode(<<0, 1, 1, 1, 1, 0::1>>)
-      %Iptrie.PfxError{id: :eaddress, detail: "<<0, 1, 1, 1, 1, 0::size(1)>>"}
+      iex> Prefix.encode(<<0, 1, 1, 1, 1, 0::1>>)
+      %PrefixError{id: :eaddress, detail: "<<0, 1, 1, 1, 1, 0::size(1)>>"}
 
       # illegal digit
-      iex> Iptrie.Pfx.encode("1.1.1.256/24")
-      %Iptrie.PfxError{id: :eaddress, detail: "1.1.1.256/24"}
+      iex> Prefix.encode("1.1.1.256/24")
+      %PrefixError{id: :eaddress, detail: "1.1.1.256/24"}
 
       # illegal prefix length
-      iex> Iptrie.Pfx.encode("acdc:1976::/129")
-      %Iptrie.PfxError{id: :emask, detail: "acdc:1976::/129"}
+      iex> Prefix.encode("acdc:1976::/129")
+      %PrefixError{id: :emask, detail: "acdc:1976::/129"}
 
   """
-  @spec encode(PfxError.t() | String.t() | pfx() | dig()) :: PfxError.t() | pfx()
-  def encode(prefix) when error?(prefix), do: prefix
+  def encode(prefix) when is_exception(prefix), do: prefix
 
   # passthrough valid pfx-bitstrings, error out on invalid pfx-bitstrings
   def encode(<<@ip4, addr::bits>> = pfx) when len4?(bit_size(addr)), do: pfx
@@ -228,7 +138,7 @@ defmodule Iptrie.Pfx do
       end
 
     case {digits, len} do
-      {x, _} when error?(x) -> x
+      {x, _} when is_exception(x) -> x
       {_, :error} -> error(:emask, "#{pfx}")
       {digits, {len, ""}} when dig?(digits, len) -> encode({digits, len})
       _ -> error(:emask, "#{pfx}")
@@ -272,23 +182,22 @@ defmodule Iptrie.Pfx do
   as the maximum mask allowed for the protocol in question.  When valid, a
   `t:dig/0`-tuple is returned.
 
-  Returns a `t:dig/0` on success, an `t:Iptrie.PfxError.t/0` otherwise.
+  Returns a `t:dig/0` on success, an `t:PrefixError.t/0` otherwise.
 
   ## Examples
-      iex> Iptrie.Pfx.decode(<<0, 1, 1, 1>>)
+      iex> Prefix.decode(<<0, 1, 1, 1>>)
       {{1, 1, 1, 0}, 24}
 
       # passthrough valid {digits,len}-forms
-      iex> Iptrie.Pfx.decode({{1, 1, 1, 0}, 16})
+      iex> Prefix.decode({{1, 1, 1, 0}, 16})
       {{1, 1, 1, 0}, 16}
 
       # and a bit too much
-      iex> Iptrie.Pfx.decode(<<0, 1, 1, 1, 1, 1::size(1)>>)
-      %Iptrie.PfxError{id: :eaddress, detail: "<<0, 1, 1, 1, 1, 1::size(1)>>"}
+      iex> Prefix.decode(<<0, 1, 1, 1, 1, 1::size(1)>>)
+      %PrefixError{id: :eaddress, detail: "<<0, 1, 1, 1, 1, 1::size(1)>>"}
 
   """
-  @spec decode(pfx() | dig()) :: dig()
-  def decode(prefix) when error?(prefix), do: prefix
+  def decode(prefix) when is_exception(prefix), do: prefix
 
   def decode(<<@ip4, addr::bitstring>>) when len4?(bit_size(addr)) do
     <<a::8, b::8, c::8, d::8>> = padright(addr, 32)
@@ -326,49 +235,48 @@ defmodule Iptrie.Pfx do
   - `mask:` `:dotted`, to include a quad dotted mask (IPv4 only)
   - otherwise, the mask defaults to cidr-notation and will be included
 
-  Invalid prefixes result in an `t:Iptrie.PfxError.t/0`-error.
+  Invalid prefixes result in an `t:PrefixError.t/0`-error.
 
   ## Examples
 
-      iex> Iptrie.Pfx.format(<<0, 1, 1, 1>>)
+      iex> Prefix.format(<<0, 1, 1, 1>>)
       "1.1.1.0/24"
 
-      iex> Iptrie.Pfx.format(<<0,1,1,1>>, mask: :none)
+      iex> Prefix.format(<<0,1,1,1>>, mask: :none)
       "1.1.1.0"
 
-      iex> Iptrie.Pfx.format(<<0, 1, 1, 1>>, mask: :dotted)
+      iex> Prefix.format(<<0, 1, 1, 1>>, mask: :dotted)
       "1.1.1.0 255.255.255.0"
 
-      iex> Iptrie.Pfx.format({{1,1,1,1}, 24}, mask: :dotted)
+      iex> Prefix.format({{1,1,1,1}, 24}, mask: :dotted)
       "1.1.1.1 255.255.255.0"
 
   """
-  @spec format(PfxError.t() | pfx() | dig(), list) :: PfxError.t() | String.t()
-  def format(pfx, opts \\ [])
+  def format1(pfx, opts \\ [])
 
-  def format(pfx, _opts) when error?(pfx), do: pfx
+  def format1(pfx, _opts) when is_exception(pfx), do: pfx
 
-  def format(<<v::binary-size(1), b::bitstring>> = pfx, opts) when key?(v, b),
+  def format1(<<v::binary-size(1), b::bitstring>> = pfx, opts) when key?(v, b),
     do:
       pfx
       |> decode()
       |> formatp(opts)
 
-  def format({digits, -1}, opts) when ip4?(digits),
+  def format1({digits, -1}, opts) when ip4?(digits),
     do: formatp({digits, 32}, opts)
 
-  def format({digits, -1}, opts) when ip6?(digits),
+  def format1({digits, -1}, opts) when ip6?(digits),
     do: formatp({digits, 128}, opts)
 
-  def format({digits, len}, opts) when dig?(digits, len),
+  def format1({digits, len}, opts) when dig?(digits, len),
     do: formatp({digits, len}, opts)
 
   # if the digits are good, it must be a bad mask
-  def format({digits, len}, _opts) when ip4?(digits) or ip6?(digits),
+  def format1({digits, len}, _opts) when ip4?(digits) or ip6?(digits),
     do: error(:emask, "#{inspect({digits, len})}")
 
   # otherwise, it'll be either bad digits or a bad pfx-bitstring
-  def format(x, _),
+  def format1(x, _),
     do: error(:eaddress, "#{inspect(x)}")
 
   #
@@ -434,8 +342,7 @@ defmodule Iptrie.Pfx do
   an exception struct on any error.
 
   """
-  @spec af_family(pfx() | dig()) :: :ip4 | :ip6 | PfxError.t()
-  def af_family(prefix) when error?(prefix), do: prefix
+  def af_family(prefix) when is_exception(prefix), do: prefix
   def af_family(<<@ip4, bits::bits>>) when size4?(bits), do: :ip4
   def af_family(<<@ip6, bits::bits>>) when size6?(bits), do: :ip6
   def af_family({digits, len}) when dig4?(digits, len), do: :ip4
@@ -447,9 +354,9 @@ defmodule Iptrie.Pfx do
   # :lt  key1 less than key2
   # :gt  key1 greater than key2
   #
-  def compare({k1, _v1}, {k2, _v2}), do: compare(k1, k2)
+  def compari({k1, _v1}, {k2, _v2}), do: compare(k1, k2)
 
-  def compare(key1, key2) do
+  def compari(key1, key2) do
     cond do
       key1 == key2 -> :eq
       bit_size(key1) < bit_size(key2) -> :lt
