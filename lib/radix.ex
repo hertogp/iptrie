@@ -19,7 +19,7 @@ defmodule RadixError do
     |> (&"#{x.id}: args (#{&1})").()
   end
 
-  def message(x), do: "#{x.id}: #{inspect(x)}"
+  def message(x), do: "#{x.id}: #{inspect(x.detail)}"
 end
 
 defmodule Radix do
