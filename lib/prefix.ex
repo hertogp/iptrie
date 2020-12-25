@@ -8,7 +8,7 @@ defmodule PrefixError do
   encountered during encoding/decoding/formatting prefixes.
 
   """
-  @type t :: %__MODULE__{id: atom(), detail: String.t()}
+  @type t :: %__MODULE__{id: atom(), detail: any()}
 
   @doc """
   Create a PrefixError struct.

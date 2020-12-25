@@ -4,26 +4,22 @@ defmodule RadixError do
   @typedoc """
   An RadixError exception struct for signalling errors.
   """
-  @type t :: %__MODULE__{id: atom, detail: String.t()}
+  @type t :: %__MODULE__{id: atom, detail: any()}
 
-  @spec new(atom, String.t()) :: t()
+  @spec new(atom, any()) :: t()
   def new(id, detail),
     do: %__MODULE__{id: id, detail: detail}
 
   @spec message(t()) :: String.t()
-  def message(t), do: format(t.id, t.detail)
+  def message(x) when is_tuple(x.detail) do
+    x.detail
+    |> Tuple.to_list()
+    |> Enum.map(fn x -> "#{inspect(x)}" end)
+    |> Enum.join(", ")
+    |> (&"#{x.id}: args (#{&1})").()
+  end
 
-  defp format(:eaddress, address),
-    do: "Bad address #{address}"
-
-  defp format(:emask, detail),
-    do: "Bad mask #{detail}"
-
-  defp format(:multi, {v1, v2}),
-    do: "Multiple reasons #{v1} -&- #{v2}"
-
-  defp format(unknown, detail),
-    do: "Bad ultra: #{inspect({unknown, detail})}"
+  def message(x), do: "#{x.id}: #{inspect(x)}"
 end
 
 defmodule Radix do
