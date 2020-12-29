@@ -77,26 +77,28 @@ defmodule Radix do
   ## Examples
 
       iex> t = new()
-      ...>     |> set({<<1::8, 1::8, 1::8>>, "1.1.1.0/24"})
-      ...>     |> set({<<1::8, 1::8, 1::8, 0::6>>, "1.1.1.0/30"})
+      ...>     |> set({<<1, 1, 1>>, "1.1.1.0/24"})
+      ...>     |> set({<<1, 1, 1, 0::6>>, "1.1.1.0/30"})
       iex>
-      iex> lpm(t, <<1::8, 1::8, 1::8, 255::8>>)
-      {<<1::8, 1::8, 1::8>>, "1.1.1.0/24"}
+      iex> lpm(t, <<1, 1, 1, 255>>)
+      {<<1, 1, 1>>, "1.1.1.0/24"}
       iex>
-      iex> lpm(t, <<1::8, 1::8, 1::8, 3::8>>)
-      {<<1::8, 1::8, 1::8, 0::6>>, "1.1.1.0/30"}
+      iex> lpm(t, <<1, 1, 1, 3>>)
+      {<<1, 1, 1, 0::6>>, "1.1.1.0/30"}
 
   Regular binaries work too:
 
-      iex> t = new([{"hallo", 5}, {"hallooo", 7}])
-      iex> lpm(t, "halloo")
-      {"hallo", 5}
+      iex> t = new([{"hello", "Sir"}, {"hellooo", "Goofey!"}])
+      iex> lpm(t, "helloo")
+      {"hello", "Sir"}
       iex>
-      iex> lpm(t, "hallooooooo")
-      {"hallooo", 7}
+      iex> lpm(t, "hellooooooo")
+      {"hellooo", "Goofey!"}
       iex>
       iex> lpm(t, "goodbye")
       nil
+      iex> lpm(t, "hello!")
+      {"hello", "Sir"}
 
   """
 
@@ -105,6 +107,10 @@ defmodule Radix do
   @empty {0, nil, nil}
 
   # Helpers
+
+  @compile {:inline, error: 2}
+  defp error(id, detail),
+    do: RadixError.new(id, detail)
 
   # - run down the tree and return the kvs of a leaf (might be nil) based on key-path
   defp get_leaf(nil, _key), do: nil
@@ -198,7 +204,7 @@ defmodule Radix do
   # - for two equal keys, the last bit position is returned.
   # - returns the last bitpos if one key is a shorter prefix of the other
   #   in which case they both should belong to the same leaf.
-  # The bit position is used to determine where a k,v-pair is stored in the tree
+  # the bit position is used to determine where a k,v-pair is stored in the tree
 
   # for a k,v-list of a leaf, we only need to check the first/longest key
   defp diffbit([{k, _v} | _leaf], key), do: diffbit(0, k, key)
@@ -278,7 +284,7 @@ defmodule Radix do
   # helper to sort leaf k,v-pairs on bit_size(k) in descending order
   defp kvsort({k1, _v1}, {k2, _v2}) do
     cond do
-      k1 == k2 -> true
+      # k1 == k2 -> true
       bit_size(k1) < bit_size(k2) -> false
       true -> true
     end
@@ -298,19 +304,19 @@ defmodule Radix do
 
   ## Example
 
-      iex> elements = [{<<0::1, 1::8, 1::8>>, "1.1.0.0/16"}, {<<0::1, 1::8, 1::8, 1::8, 1::8>>, "x.x.x.x"}]
+      iex> elements = [{<<1, 1>>, "1.1.0.0/16"}, {<<1, 1, 1, 1>>, "x.x.x.x"}]
       iex> ipt = new() |> set(elements)
       {0,
-        {24, {-1, [{<<0::1, 1::8, 1::8>>, "1.1.0.0/16"}]},
-             {-1, [{<<0::1, 1::8, 1::8, 1::8, 1::8>>, "x.x.x.x"}]}},
+        {23, {-1, [{<<1, 1>>, "1.1.0.0/16"}]},
+             {-1, [{<<1, 1, 1, 1>>, "x.x.x.x"}]}},
         nil
       }
       iex> # fix the x's
-      iex> ipt = set(ipt, {<<0::1, 1::8, 1::8, 1::8, 1::8>>, "1.1.1.1"})
+      iex> ipt = set(ipt, {<<1, 1, 1, 1>>, "1.1.1.1"})
       iex> ipt
       {0,
-        {24, {-1, [{<<0::1, 1::8, 1::8>>, "1.1.0.0/16"}]},
-             {-1, [{<<0::1, 1::8, 1::8, 1::8, 1::8>>, "1.1.1.1"}]}},
+        {23, {-1, [{<<1, 1>>, "1.1.0.0/16"}]},
+             {-1, [{<<1, 1, 1, 1>>, "1.1.1.1"}]}},
         nil
       }
 
@@ -323,18 +329,25 @@ defmodule Radix do
     Enum.reduce(elements, tree, fn elm, t -> set(t, elm) end)
   end
 
-  def to_list(bst), do: to_list(bst, [])
-  defp to_list({_bit, l, r}, acc), do: to_list(l, acc) ++ to_list(r, [])
-  defp to_list({-1, leaf}, acc), do: leaf ++ acc
-  defp to_list(nil, acc), do: acc
-
   # get the longest prefix match for binary key
   # - follow tree path using key and get longest match from the leaf found
   # - more specific is to the right, less specific is to the left.  So:
   #   - when left won't provide a match, the right never will either
   #   - however, if the right won't match, the left might still match
-  def lpm(x) when is_exception(x), do: x
+  @doc """
+  Longest prefix match for given key, returns either nil of {k,v}-pair.
 
+
+  ## Example
+
+      iex> elements = [{<<1, 1>>, "1.1.0.0/16"}, {<<1, 1, 1, 1>>, "1.1.1.1"}]
+      iex> t = new(elements)
+      iex> lpm(t, <<1, 1, 2, 2>>)
+      {<<1, 1>>, "1.1.0.0/16"}
+      iex> lpm(t, <<1, 1, 1, 1>>)
+      {<<1, 1, 1, 1>>, "1.1.1.1"}
+
+  """
   def lpm(nil, _key), do: nil
 
   def lpm({b, l, r}, key) do
@@ -351,8 +364,14 @@ defmodule Radix do
   end
 
   def lpm({-1, kvs}, key), do: kvget(kvs, key)
+  def lpm(x) when is_exception(x), do: x
 
   # TRAVERSALs
+
+  def to_list(bst), do: to_list(bst, [])
+  defp to_list({_bit, l, r}, acc), do: to_list(l, acc) ++ to_list(r, [])
+  defp to_list({-1, leaf}, acc), do: leaf ++ acc
+  defp to_list(nil, acc), do: acc
 
   @doc """
   Traverse the tree in `order`, one of (:inorder, :preorder, :postorder), and
@@ -388,8 +407,4 @@ defmodule Radix do
 
   def traverse(acc, fun, nil, _order), do: fun.(acc, nil)
   def traverse(acc, fun, {-1, leaf}, _order), do: fun.(acc, leaf)
-
-  @compile {:inline, error: 2}
-  defp error(id, detail),
-    do: RadixError.new(id, detail)
 end

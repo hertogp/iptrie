@@ -129,7 +129,8 @@ defmodule Prefix do
 
   So the list comprehension earlier, could also read:
 
-      iex> for ip <- new(<<10, 10, 10, 0::6>>, 32) do "#{ip}" end
+      iex> prefix = new(<<10, 10, 10, 0::6>>, 32)
+      iex> for ip <- prefix do "#{ip}" end
       [
         "10.10.10.0",
         "10.10.10.1",
@@ -149,9 +150,23 @@ defmodule Prefix do
 
   # Behaviour
 
-  @callback encode(term) :: t
-  @callback decode(t) :: term
+  @doc """
+  Encode one or more domain specific constructs into a `t:Prefix.t/0`,
+  any errors should result in a `t:PrefixError.t/0`-struct.
 
+  """
+  @callback encode(term) :: t | PrefixError.t()
+
+  def encode(arg, module), do: module.encode(arg)
+
+  @doc """
+  Decode a `t:Prefix.t/0` back into a domain specific construct, any errors
+  should result in a `t:PrefixError.t/0`-struct.
+
+  """
+  @callback decode(t) :: term | PrefixError.t()
+
+  def decode(arg, module), do: module.decode(arg)
   # Guards
 
   @doc """
@@ -248,8 +263,17 @@ defmodule Prefix do
   def new(x, _) when is_exception(x), do: x
   def new(x, m), do: error(:new, {x, m})
 
-  # Padding/Truncating
-  # resize(prefix, max, fill \\0, side \\ :left)
+  # Bits padding, truncating, etc
+
+  def bit(prefix, pos) when pos > bit_size(prefix.bits), do: 0
+
+  def bit(prefix, pos) when pos > 0 do
+    <<_::size(pos), bit::1, _::bitstring>> = prefix.bits
+    bit
+  end
+
+  def bit(x, _) when is_exception(x), do: x
+  def bit(x, p), do: error(:bit, {x, p})
 
   @doc """
   Prepend bits to a prefix to achieve a desired  length.
@@ -300,6 +324,9 @@ defmodule Prefix do
       %Prefix{bits: <<255, 255, 255, 0>>, maxlen: 32}
 
   """
+  def padright(x, 0) when valid?(x), do: padright(x, x.maxlen, 0)
+  def padright(x, 1) when valid?(x), do: padright(x, x.maxlen, 1)
+
   @spec padright(t, pos_integer, 0..1) :: t
   def padright(prefix, size, fill \\ 0)
 
@@ -315,6 +342,19 @@ defmodule Prefix do
 
   def padright(x, _, _) when is_exception(x), do: x
   def padright(x, s, f), do: error(:padright, {x, s, f})
+
+  def replace(x, 0, 1) when valid?(x) do
+    len = bit_size(x.bits)
+    %{x | bits: <<-1::size(len)>>}
+  end
+
+  def replace(x, 1, 0) when valid?(x) do
+    len = bit_size(x.bits)
+    %{x | bits: <<0::size(len)>>}
+  end
+
+  def replace(x, _, _) when is_exception(x), do: x
+  def replace(x, y, z), do: error(:replace, {x, y, z})
 
   @doc """
   Split a *prefix* into a list of smaller pieces, each *newlen* bits long.

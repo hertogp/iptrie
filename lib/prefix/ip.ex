@@ -1,4 +1,5 @@
 defmodule Prefix.IP do
+  @behaviour Prefix
   @moduledoc """
   Functions to encode/decode IP prefixes.
 
@@ -11,20 +12,16 @@ defmodule Prefix.IP do
   @typedoc """
   An IPv4 prefix in `{digits, length}`-format.
 
-  A `-1` as length means the source of the `digits` did not provide a length,
-  which will default to maximum length.
   """
-  @type digits4 :: {{0..255, 0..255, 0..255, 0..255}, -1..32}
+  @type digits4 :: {{0..255, 0..255, 0..255, 0..255}, 0..32}
 
   @typedoc """
   An IPv6 prefix in `{digits, length}`-format.
 
-  A `-1` as length means the source of the `digits` did not provide a length,
-  which will default to maximum length.
   """
   @type digits6 ::
           {{0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535},
-           -1..128}
+           0..128}
   @typedoc """
   An IPv4 or IPv6 prefix in `{digits, length}`-format.
   """
@@ -32,37 +29,37 @@ defmodule Prefix.IP do
 
   # GUARDS
 
-  # guards for {digits, len}, -1 denotes absence of mask
-  defguardp len4?(l) when is_integer(l) and l in -1..32
-  defguardp len6?(l) when is_integer(l) and l in -1..128
+  # guards for {digits, len}
+  defguard len4?(l) when is_integer(l) and l in 0..32
+  defguard len6?(l) when is_integer(l) and l in 0..128
 
-  defguardp ip4?(t)
-            when is_tuple(t) and
-                   tuple_size(t) == 4 and
-                   elem(t, 0) in 0..255 and
-                   elem(t, 1) in 0..255 and
-                   elem(t, 2) in 0..255 and
-                   elem(t, 3) in 0..255
+  defguard ip4?(t)
+           when is_tuple(t) and
+                  tuple_size(t) == 4 and
+                  elem(t, 0) in 0..255 and
+                  elem(t, 1) in 0..255 and
+                  elem(t, 2) in 0..255 and
+                  elem(t, 3) in 0..255
 
-  defguardp ip6?(t)
-            when is_tuple(t) and
-                   tuple_size(t) == 8 and
-                   elem(t, 0) in 0..65535 and
-                   elem(t, 1) in 0..65535 and
-                   elem(t, 2) in 0..65535 and
-                   elem(t, 3) in 0..65535 and
-                   elem(t, 4) in 0..65535 and
-                   elem(t, 5) in 0..65535 and
-                   elem(t, 6) in 0..65535 and
-                   elem(t, 7) in 0..65535
+  defguard ip6?(t)
+           when is_tuple(t) and
+                  tuple_size(t) == 8 and
+                  elem(t, 0) in 0..65535 and
+                  elem(t, 1) in 0..65535 and
+                  elem(t, 2) in 0..65535 and
+                  elem(t, 3) in 0..65535 and
+                  elem(t, 4) in 0..65535 and
+                  elem(t, 5) in 0..65535 and
+                  elem(t, 6) in 0..65535 and
+                  elem(t, 7) in 0..65535
 
-  defguardp dig4?(digits, len) when ip4?(digits) and len4?(len)
-  defguardp dig6?(digits, len) when ip6?(digits) and len6?(len)
-  defguardp dig?(digits, len) when dig4?(digits, len) or dig6?(digits, len)
+  defguard dig4?(digits, len) when ip4?(digits) and len4?(len)
+  defguard dig6?(digits, len) when ip6?(digits) and len6?(len)
+  defguard dig?(digits, len) when dig4?(digits, len) or dig6?(digits, len)
 
   # guards for prefixes
-  defguardp prefix4?(x) when Prefix.valid?(x) and x.maxlen == 32
-  defguardp prefix6?(x) when Prefix.valid?(x) and x.maxlen == 128
+  defguard prefix4?(x) when Prefix.valid?(x) and x.maxlen == 32
+  defguard prefix6?(x) when Prefix.valid?(x) and x.maxlen == 128
 
   @compile inline: [error: 2]
   defp error(id, detail), do: PrefixError.new(id, detail)
@@ -85,7 +82,7 @@ defmodule Prefix.IP do
       iex> encode({{1, 1, 1, 1}, 24})
       %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
 
-      iex> encode({{1,1,1,1}, -1})
+      iex> encode({1,1,1,1})
       %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
 
       iex> encode("acdc:1976::/32")
@@ -95,8 +92,8 @@ defmodule Prefix.IP do
       iex> encode("1.2.3.4.5")
       %PrefixError{id: :encode, detail: "1.2.3.4.5"}
 
-      iex> encode({{1, 2, 3, 4, 5}, -1})
-      %PrefixError{id: :encode, detail: {{1, 2, 3, 4, 5}, -1}}
+      iex> encode({1, 2, 3, 4, 5})
+      %PrefixError{id: :encode, detail: {1, 2, 3, 4, 5}}
 
       # illegal digit
       iex> encode("1.1.1.256/24")
@@ -111,7 +108,8 @@ defmodule Prefix.IP do
       %PrefixError{id: :func_x, detail: "some error"}
   """
 
-  @spec encode(String.t() | digits()) :: Prefix.t() | PrefixError.t()
+  @impl Prefix
+  @spec encode(String.t() | :inet.ip_address() | digits()) :: Prefix.t() | PrefixError.t()
   def encode(prefix) when is_binary(prefix) do
     {addr, len} =
       prefix
@@ -133,13 +131,14 @@ defmodule Prefix.IP do
     case {digits, len} do
       {x, _} when is_exception(x) -> x
       {_, :error} -> error(:encode, prefix)
+      {digits, {-1, ""}} -> encode(digits)
       {digits, {len, ""}} when dig?(digits, len) -> encode({digits, len})
       _ -> error(:encode, prefix)
     end
   end
 
-  def encode({digits, -1}) when ip4?(digits), do: encode({digits, 32})
-  def encode({digits, -1}) when ip6?(digits), do: encode({digits, 128})
+  def encode(digits) when ip4?(digits), do: encode({digits, 32})
+  def encode(digits) when ip6?(digits), do: encode({digits, 128})
 
   def encode({digits = {a, b, c, d}, len}) when dig4?(digits, len) do
     <<bits::bitstring-size(len), _::bitstring>> = <<a::8, b::8, c::8, d::8>>
@@ -163,11 +162,14 @@ defmodule Prefix.IP do
 
   Notes:
   - the `/len` is not added when `len` is at its maximum.
-  - when converting from `t:digits/0` format, the mask is *not* applied first.
+  - when converting from `digits` format, the mask is *not* applied first.
 
   ## Examples
 
       iex> decode(%Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32})
+      "1.1.1.1"
+
+      iex> decode({1, 1, 1, 1})
       "1.1.1.1"
 
       iex> decode(%Prefix{bits: <<1, 1, 1>>, maxlen: 32})
@@ -179,14 +181,18 @@ defmodule Prefix.IP do
 
       # invalid args yield an exception struct
       iex> decode(%Prefix{bits: <<1, 1, 1, 1, 1::size(1)>>, maxlen: 32})
-      %PrefixError{detail: %Prefix{bits: <<1, 1, 1, 1, 1::size(1)>>, maxlen: 32}, id: :decode}
+      %PrefixError{id: :decode, detail: %Prefix{bits: <<1, 1, 1, 1, 1::size(1)>>, maxlen: 32}}
+
+      iex> decode({1, 2, 3, 4, 5})
+      %PrefixError{id: :decode, detail: {1, 2, 3, 4, 5}}
 
       # an exception as argument is passed through
       iex> decode(%PrefixError{id: :func_x, detail: "some error"})
       %PrefixError{id: :func_x, detail: "some error"}
 
   """
-  @spec decode(Prefix.t() | digits()) :: String.t() | PrefixError.t()
+  @impl Prefix
+  @spec decode(Prefix.t() | :inet.ip_address() | digits()) :: String.t() | PrefixError.t()
   def decode(prefix) when prefix4?(prefix),
     do: Prefix.format(prefix)
 
@@ -195,6 +201,12 @@ defmodule Prefix.IP do
     pfx = :inet.ntoa(digits)
     if len < 128, do: "#{pfx}/#{len}", else: pfx
   end
+
+  def decode(digits) when ip4?(digits),
+    do: "#{:inet.ntoa(digits)}"
+
+  def decode(digits) when ip6?(digits),
+    do: "#{:inet.ntoa(digits)}"
 
   def decode({digits, len}) when dig4?(digits, len) do
     pfx = :inet.ntoa(digits)
