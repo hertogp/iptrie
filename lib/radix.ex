@@ -50,7 +50,7 @@ defmodule Radix do
   @moduledoc """
   A path-compressed Patricia trie with one-way branching removed.
 
-  The radix tree (`r=2`)  has 2 types of nodes:
+  The radix tree (with `r=2`)  has 2 types of nodes:
   - *internal* `{bit, left, right}`, where `bit` >= 0
   - *leaf*     `{-1, [{key,value} ..]}`
 
@@ -88,17 +88,18 @@ defmodule Radix do
 
   Regular binaries work too:
 
-      iex> t = new([{"hello", "Sir"}, {"hellooo", "Goofey!"}])
+      iex> t = new([{"hello", "Sir"}, {"hellooo", "there"}])
       iex> lpm(t, "helloo")
       {"hello", "Sir"}
       iex>
       iex> lpm(t, "hellooooooo")
-      {"hellooo", "Goofey!"}
+      {"hellooo", "there"}
+      iex>
+      iex> lpm(t, "hello!")
+      {"hello", "Sir"}
       iex>
       iex> lpm(t, "goodbye")
       nil
-      iex> lpm(t, "hello!")
-      {"hello", "Sir"}
 
   """
 
@@ -247,14 +248,14 @@ defmodule Radix do
   defp kvmatch([{k1, _v} | _], k2) when k1 == k2, do: :update
 
   defp kvmatch([{k1, _v} | tail], k2) do
-    # expands the smallest key to match size of larget key
+    # expands the smallest key to match size of larger key
     # when that matches one key is a prefix of the other key
     pad1 = max(0, bit_size(k2) - bit_size(k1))
     pad2 = max(0, bit_size(k1) - bit_size(k2))
 
     case <<k1::bitstring, 0::size(pad1)>> == <<k2::bitstring, 0::size(pad2)>> do
-      true -> kvmatch(tail, k2)
       false -> :split
+      true -> kvmatch(tail, k2)
     end
   end
 
@@ -297,6 +298,24 @@ defmodule Radix do
 
   def new(kvs) when is_list(kvs) do
     Enum.reduce(kvs, @empty, fn kv, t -> set(t, kv) end)
+  end
+
+  @doc """
+  Get a {k,v}-pair for search key, using an *exact* match, or return nil.
+
+  ## Example
+
+      iex> elements = [{<<1, 1>>, 16}, {<<1, 1, 1>>, 24}, {<<1, 1, 1, 1>>, 32}]
+      iex> ipt = new(elements)
+      iex> get(ipt, <<1, 1, 1>>)
+      {<<1, 1, 1>>, 24}
+
+  """
+  @spec get(any, bitstring()) :: {bitstring(), term} | nil
+  def get(t, key) do
+    t
+    |> get_leaf(key)
+    |> List.keyfind(key, 0)
   end
 
   @doc """
@@ -374,11 +393,13 @@ defmodule Radix do
   defp to_list(nil, acc), do: acc
 
   @doc """
-  Traverse the tree in `order`, one of (:inorder, :preorder, :postorder), and
-  run function f on each node.  Function f should have the signatures:
-    f :: (acc, {bit, l, r}) -> acc
-    f :: (acc, {-1, leaf}) -> acc
-    f :: (acc, nil) -> acc
+  Traverse the tree in `order`, one of (`:inorder`, `:preorder` or
+  `:postorder`), and run function f on each node.  Function f should have the
+  signatures:
+
+  -  `(acc, {bit, l, r}) :: acc`
+  -  `(acc, {-1, leaf}) :: acc`
+  -  `(acc, nil) :: acc`
 
   """
   def traverse(acc, f, node, order \\ :inorder)
