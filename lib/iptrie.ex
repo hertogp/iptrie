@@ -15,95 +15,75 @@ defmodule Iptrie do
   alias PrefixError
   alias Radix
 
-  @enforce_keys [:ip4, :ip6]
-  defstruct ip4: nil, ip6: nil
+  defstruct root: nil
 
   @type t :: %__MODULE__{}
-  # HELPERS
 
-  # Data
-  @ip4 Radix.new([
-         {encode("10.0.0.0/8").bits, "rfc1918"},
-         {encode("172.16.0.0/12").bits, "rfc1918"},
-         {encode("192.168.0.0/16").bits, "rfc1918"}
-       ])
-  @ip6 Radix.new([{<<0xACDC::16>>, "rock"}])
+  # Table
 
-  @ip %{__struct__: __MODULE__, ip4: @ip4, ip6: @ip6}
-
-  # Api
   @doc """
   Create an new, empty Iptrie.
 
   ## Example
 
       iex> Iptrie.new()
-      %Iptrie{ip4: {0, nil, nil}, ip6: {0, nil, nil}}
+      %Iptrie{root: {0, nil, nil}}
 
   """
-  def new, do: %__MODULE__{ip4: Radix.new(), ip6: Radix.new()}
+  def new, do: %__MODULE__{root: Radix.new()}
 
   @doc """
   Create a new Iptrie populated with the given prefix,value pair(s).
 
   """
-  def new(elements) do
-    Enum.reduce(elements, new(), fn elm, t -> set(t, elm) end)
-  end
+  def new(elements), do: new() |> set(elements)
 
   # for convenience: add a list of [{k,v},...] to a tree
   @doc """
   Enter a single prefix-value pair or list thereof, into an iptrie.
 
   """
-  def set(tree, element_or_elements)
-
-  def set(tree, {pfx, val}) do
+  def set(tree, pfx, val) do
     case encode(pfx) do
-      x when prefix4?(x) -> %{tree | ip4: Radix.set(tree.ip4, x.bits, val)}
-      x when prefix6?(x) -> %{tree | ip6: Radix.set(tree.ip6, x.bits, val)}
       x when is_exception(x) -> raise x
-      _ -> raise PrefixError.new(:set, {pfx, val})
+      x -> %{tree | root: Radix.set(tree.root, x.bits, val)}
     end
   end
 
   def set(tree, elements) do
-    Enum.reduce(elements, tree, fn elm, t -> set(t, elm) end)
+    Enum.reduce(elements, tree, fn {k, v}, t -> set(t, k, v) end)
   end
 
   @doc """
   Look for the longest matching prefix in an Iptrie.
 
   """
-  # def lookup(%__MODULE__{} = tree, pfx) do
-  #   case encode(pfx) do
-  #     x when prefix4?(x) -> Radix.lpm(tree.ip4, x.bits)
-  #     x when prefix6?(x) -> Radix.lpm(tree.ip6, x.bits)
-  #     x -> x
-  #   end
-  # end
-  @spec lookup(t(), String.t() | Prefix.t() | :inet.ip_address()) ::
-          term
+  @spec lookup(t(), String.t() | Prefix.t() | :inet.ip_address()) :: term
   def lookup(%__MODULE__{} = tree, pfx) when is_binary(pfx),
     do: lookup(tree, encode(pfx))
 
   def lookup(%__MODULE__{} = tree, x) when is_tuple(x),
     do: lookup(tree, encode(x))
 
-  def lookup(%__MODULE__{} = tree, x) when prefix4?(x),
-    do: Radix.lpm(tree.ip4, x.bits)
-
-  def lookup(%__MODULE__{} = tree, x) when prefix6?(x),
-    do: Radix.lpm(tree.ip6, x.bits)
+  def lookup(%__MODULE__{} = tree, %Prefix{} = x),
+    do: Radix.lpm(tree.root, x.bits)
 
   def lookup(_, _), do: nil
 
-  # IP prefix functions
+  # IP prefixes
 
-  def info(prefix) do
-    lookup(@ip, prefix)
-  end
+  @doc """
+  Return the this-network address for given *prefix*.
 
+  ## Examples
+
+      iex> network("1.1.1.10/24")
+      "1.1.1.0"
+
+      iex> network({{1, 1, 1, 10}, 24})
+      "1.1.1.0"
+
+  """
   def network(prefix) do
     prefix
     |> encode()
@@ -111,6 +91,18 @@ defmodule Iptrie do
     |> decode()
   end
 
+  @doc """
+  Return the broadcast address for given *prefix*.
+
+  ## Examples
+
+      iex> broadcast("1.1.1.10/24")
+      "1.1.1.255"
+
+      iex> broadcast({{1, 1, 1, 10}, 24})
+      "1.1.1.255"
+
+  """
   def broadcast(prefix) do
     prefix
     |> encode()
@@ -118,28 +110,64 @@ defmodule Iptrie do
     |> decode()
   end
 
+  @doc """
+  Return the list of host addresses for given *prefix*.
+
+  ## Example
+
+      iex> hosts("1.1.1.0/30")
+      ["1.1.1.0", "1.1.1.1", "1.1.1.2", "1.1.1.3"]
+
+  """
   def hosts(prefix) do
     prefix
     |> encode()
     |> Enum.map(fn ip -> decode(ip) end)
   end
 
+  @doc """
+  Returns the mask for given prefix.
+
+  ## Example
+
+      iex> mask("1.1.1.0/24")
+      "255.255.255.0"
+
+  """
   def mask(prefix) do
     prefix
     |> encode()
-    |> replace(0, 1)
+    |> replace(1, 1)
     |> padright(0)
     |> decode()
   end
 
+  @doc """
+  Returns the inverse mask for given prefix.
+
+  ## Example
+
+      iex> inv_mask("1.1.1.0/24")
+      "0.0.0.255"
+
+  """
   def inv_mask(prefix) do
     prefix
     |> encode()
-    |> replace(1, 0)
+    |> replace(0, 1)
     |> padright(1)
     |> decode()
   end
 
+  @doc """
+  Returns the neighboring prefix such that both can be combined in a supernet.
+
+  ## Example
+
+      iex> neighbor("1.1.1.0/25")
+      "1.1.1.128/25"
+
+  """
   def neighbor(prefix) do
     x = encode(prefix)
 
@@ -150,13 +178,44 @@ defmodule Iptrie do
     |> decode()
   end
 
-  def moveto(prefix, n) do
+  @doc """
+  Jump to another prefix at distance `n`.
+
+  This will wrap around the available address space without warning.
+
+  ## Examples
+
+      iex> jump("1.1.1.0/24", 1)
+      "1.1.2.0/24"
+
+      iex> jump("1.1.1.0/30", 64)
+      "1.1.2.0/30"
+
+      iex> jump("0.0.0.0", -1)
+      "255.255.255.255"
+
+  """
+  def jump(prefix, n) do
     prefix
     |> encode()
-    |> offset(n)
+    |> offset(n, 1)
     |> decode()
   end
 
+  @doc """
+  Return the host address for the *nth*-member of the prefix.
+
+  This will wrap around the available address space without warning.
+
+  ## Examples
+
+      iex> host("1.1.1.0/24", 129)
+      "1.1.1.129"
+
+      iex> host("1.1.1.0/24", 256)
+      "1.1.1.0"
+
+  """
   def host(prefix, nth) do
     prefix
     |> encode()
@@ -164,6 +223,14 @@ defmodule Iptrie do
     |> decode()
   end
 
+  @doc """
+  Return the number of host addresses available in given *prefix*.
+
+  ## Example
+
+      iex> numhosts("acdc:1976::/32")
+      79228162514264337593543950336
+  """
   def numhosts(prefix) do
     prefix
     |> encode()
@@ -171,24 +238,12 @@ defmodule Iptrie do
   end
 
   # TODO Table funcs
-  # x new :: create a new iptrie
-  # x set :: set exact match
+  # o exec :: apply function to all nodes & leafs
   # o get :: get exact match
-  # x lpm :: longest prefix match
+  # o less :: return all less specifics (option inclusive)
   # o map :: apply function to all {k,v}-pairs
   # o more :: return all more specifics (option inclusive)
-  # o less :: return all less specifics (option inclusive)
-  # o exec :: apply function to all nodes & leafs
-  #
+
   # TODO Prefix funcs
-  # x network :: return network address
-  # x broadcast :: return broadcast address
-  # x hosts :: return list of host addresses
   # o hosts_lazy :: return stream that returns hosts addresses
-  # x mask :: return network mask
-  # x inv_mask :: return inverse mask
-  # x neighbor :: return prefix that will combine with arg into a supernet
-  # x moveto :: return another prefix, offset removed from original
-  # x host :: return host address in prefix
-  # x numhosts :: return number of host in the prefix
 end

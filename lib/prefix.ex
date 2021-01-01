@@ -276,6 +276,36 @@ defmodule Prefix do
   def bit(x, p), do: error(:bit, {x, p})
 
   @doc """
+  Rotate the prefix bits n-positions
+
+  ## Example
+
+      iex> new(<<1, 2, 3, 4>>, 32) |> rotate(8)
+      %Prefix{bits: <<4, 1, 2, 3>>, maxlen: 32}
+
+      iex> new(<<1, 2, 3, 4>>, 32) |> rotate(-8)
+      %Prefix{bits: <<2, 3, 4, 1>>, maxlen: 32}
+
+      iex> new(<<1, 2, 3, 4>>, 32) |> rotate(-1)
+      %Prefix{bits: <<2, 4, 6, 8>>, maxlen: 32}
+
+  """
+  def rotate(prefix, shift) when shift < 0 do
+    plen = bit_size(prefix.bits)
+    rotate(prefix, plen + rem(shift, plen))
+  end
+
+  def rotate(prefix, 0), do: prefix
+
+  def rotate(prefix, shift) when valid?(prefix) do
+    break = bit_size(prefix.bits) - rem(shift, bit_size(prefix.bits))
+
+    <<left::bitstring-size(break), right::bitstring>> = prefix.bits
+
+    %{prefix | bits: <<right::bitstring, left::bitstring-size(break)>>}
+  end
+
+  @doc """
   Prepend bits to a prefix to achieve a desired  length.
 
   By default, `0`-bits are used, unless *fill* is `1` in which case `1`-bits
@@ -293,20 +323,21 @@ defmodule Prefix do
 
   """
   @spec padleft(t, pos_integer, 0..1) :: t
-  def padleft(prefix, size, fill \\ 0)
+  def padleft(prefix, size, fill \\ 0, skip \\ 0)
 
-  def padleft(prefix, size, fill) when size?(prefix, size) do
-    pad = size - bit_size(prefix.bits)
+  def padleft(prefix, size, fill, skip) when size?(prefix, size) do
+    pad = size - bit_size(prefix.bits) - skip
     fill = if fill == 0, do: 0, else: -1
+    <<keep::size(skip), bits::bitstring>> = prefix.bits
 
     case pad > 0 do
-      true -> %{prefix | bits: <<fill::size(pad), prefix.bits::bitstring>>}
-      false -> %{prefix | bits: <<prefix.bits::bitstring-size(size)>>}
+      true -> %{prefix | bits: <<keep::size(skip), fill::size(pad), bits::bitstring>>}
+      false -> %{prefix | bits: <<keep::size(skip), bits::bitstring-size(size)>>}
     end
   end
 
-  def padleft(x, _, _) when is_exception(x), do: x
-  def padleft(x, s, f), do: error(:padleft, {x, s, f})
+  def padleft(x, _, _, _) when is_exception(x), do: x
+  def padleft(x, s, f, k), do: error(:padleft, {x, s, f, k})
 
   @doc """
   Append bits to a prefix to achieve a desired length.
@@ -343,18 +374,25 @@ defmodule Prefix do
   def padright(x, _, _) when is_exception(x), do: x
   def padright(x, s, f), do: error(:padright, {x, s, f})
 
-  def replace(x, 0, 1) when valid?(x) do
-    len = bit_size(x.bits)
-    %{x | bits: <<-1::size(len)>>}
-  end
-
-  def replace(x, 1, 0) when valid?(x) do
-    len = bit_size(x.bits)
-    %{x | bits: <<0::size(len)>>}
-  end
-
+  def replace(prefix, bit, offset \\ 0)
+  def replace(x, bit, offset) when valid?(x), do: replacep(x, bit, offset)
   def replace(x, _, _) when is_exception(x), do: x
   def replace(x, y, z), do: error(:replace, {x, y, z})
+
+  def replacep(x, bit, offset) when offset < 0 and offset > -bit_size(x.bits),
+    do: replace(x, bit, bit_size(x.bits) + offset)
+
+  def replacep(x, 1, offset) when -1 < offset and offset < bit_size(x.bits) do
+    len = bit_size(x.bits) - offset
+    <<keep::size(offset), _::bitstring>> = x.bits
+    %{x | bits: <<keep::size(offset), -1::size(len)>>}
+  end
+
+  def replacep(x, 0, offset) when -1 < offset and offset < bit_size(x.bits) do
+    len = bit_size(x.bits) - offset
+    <<keep::size(offset), _::bitstring>> = x.bits
+    %{x | bits: <<keep::size(offset), 0::size(len)>>}
+  end
 
   @doc """
   Split a *prefix* into a list of smaller pieces, each *newlen* bits long.
@@ -558,17 +596,27 @@ defmodule Prefix do
       iex> new(<<>>, 32) |> offset(1)
       %Prefix{bits: <<>>, maxlen: 32}
 
+      # when skipping bits
+      iex> new(<<1, 255, 0>>, 32) |> offset(256)
+      %Prefix{bits: <<2, 0, 0>>, maxlen: 32}
+      iex>
+      iex> # but when skipping the first 8 bits:
+      iex> new(<<1, 255, 0>>, 32) |> offset(256, 8)
+      %Prefix{bits: <<1, 0, 0>>, maxlen: 32}
+
   """
-  @spec offset(t, integer) :: t
-  def offset(prefix, offset) when valid?(prefix) do
-    len = bit_size(prefix.bits)
-    <<n::size(len)>> = prefix.bits
+  @spec offset(t, integer) :: t | PrefixError.t()
+  def offset(prefix, offset, skip \\ 0)
+
+  def offset(x, offset, skip) when valid?(x) and -1 < skip and skip <= bit_size(x.bits) do
+    len = bit_size(x.bits) - skip
+    <<keep::size(skip), n::size(len)>> = x.bits
     n = n + offset
-    %{prefix | bits: <<n::size(len)>>}
+    %{x | bits: <<keep::size(skip), n::size(len)>>}
   end
 
-  def offset(x, _) when is_exception(x), do: x
-  def offset(x, o), do: error(:offset, {x, o})
+  def offset(x, _, _) when is_exception(x), do: x
+  def offset(x, o, s), do: error(:offset, {x, o, s})
 
   @doc """
   The 'size' of a prefix as determined by its *missing* bits.

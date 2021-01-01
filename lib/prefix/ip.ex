@@ -3,6 +3,10 @@ defmodule Prefix.IP do
   @moduledoc """
   Functions to encode/decode IP prefixes.
 
+  Note: prepends either a `0`- or an `1`-bit to distinguish between ip4 and ip6
+  prefixes respectively.  That way, IP prefixes can be stored in a single
+  radix tree referencing the prefix.bits directly.
+
   """
 
   use Bitwise
@@ -22,10 +26,15 @@ defmodule Prefix.IP do
   @type digits6 ::
           {{0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535},
            0..128}
+
   @typedoc """
   An IPv4 or IPv6 prefix in `{digits, length}`-format.
   """
   @type digits :: digits4() | digits6()
+
+  # Markers
+  @ip4 <<0::1>>
+  @ip6 <<1::1>>
 
   # GUARDS
 
@@ -58,8 +67,8 @@ defmodule Prefix.IP do
   defguard dig?(digits, len) when dig4?(digits, len) or dig6?(digits, len)
 
   # guards for prefixes
-  defguard prefix4?(x) when Prefix.valid?(x) and x.maxlen == 32
-  defguard prefix6?(x) when Prefix.valid?(x) and x.maxlen == 128
+  defguard prefix4?(x) when Prefix.valid?(x) and x.maxlen == 33
+  defguard prefix6?(x) when Prefix.valid?(x) and x.maxlen == 129
 
   @compile inline: [error: 2]
   defp error(id, detail), do: PrefixError.new(id, detail)
@@ -77,35 +86,11 @@ defmodule Prefix.IP do
   ## Examples
 
       iex> encode("1.1.1.0/24")
-      %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
-
-      iex> encode({{1, 1, 1, 1}, 24})
-      %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
-
-      iex> encode({1,1,1,1})
-      %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
+      %Prefix{bits: <<0::1, 1, 1, 1>>, maxlen: 33}
 
       iex> encode("acdc:1976::/32")
-      %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128}
+      %Prefix{bits: <<1::1, 0xacdc::16, 0x1976::16>>, maxlen: 129}
 
-      # too many digits
-      iex> encode("1.2.3.4.5")
-      %PrefixError{id: :encode, detail: "1.2.3.4.5"}
-
-      iex> encode({1, 2, 3, 4, 5})
-      %PrefixError{id: :encode, detail: {1, 2, 3, 4, 5}}
-
-      # illegal digit
-      iex> encode("1.1.1.256/24")
-      %PrefixError{id: :encode, detail: "1.1.1.256/24"}
-
-      # illegal prefix length
-      iex> encode("acdc:1976::/129")
-      %PrefixError{id: :encode, detail: "acdc:1976::/129"}
-
-      # an exception as argument is passed through
-      iex> encode(%PrefixError{id: :func_x, detail: "some error"})
-      %PrefixError{id: :func_x, detail: "some error"}
   """
 
   @impl Prefix
@@ -141,15 +126,18 @@ defmodule Prefix.IP do
   def encode(digits) when ip6?(digits), do: encode({digits, 128})
 
   def encode({digits = {a, b, c, d}, len}) when dig4?(digits, len) do
-    <<bits::bitstring-size(len), _::bitstring>> = <<a::8, b::8, c::8, d::8>>
-    %Prefix{bits: bits, maxlen: 32}
+    len = len + 1
+    <<bits::bitstring-size(len), _::bitstring>> = <<@ip4, a::8, b::8, c::8, d::8>>
+    %Prefix{bits: bits, maxlen: 33}
   end
 
   def encode({digits = {a, b, c, d, e, f, g, h}, len}) when dig6?(digits, len) do
-    <<bits::bitstring-size(len), _::bitstring>> =
-      <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>>
+    len = len + 1
 
-    %Prefix{bits: bits, maxlen: 128}
+    <<bits::bitstring-size(len), _::bitstring>> =
+      <<@ip6, a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>>
+
+    %Prefix{bits: bits, maxlen: 129}
   end
 
   def encode(x) when is_exception(x), do: x
@@ -166,25 +154,15 @@ defmodule Prefix.IP do
 
   ## Examples
 
-      iex> decode(%Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32})
-      "1.1.1.1"
-
       iex> decode({1, 1, 1, 1})
       "1.1.1.1"
 
-      iex> decode(%Prefix{bits: <<1, 1, 1>>, maxlen: 32})
+      iex> decode(%Prefix{bits: <<0::1, 1, 1, 1>>, maxlen: 33})
       "1.1.1.0/24"
 
       # Note: mask is *not* applied when using `{digits, len}`-format
       iex> decode({{1, 1, 1, 1}, 24})
       "1.1.1.1/24"
-
-      # invalid args yield an exception struct
-      iex> decode(%Prefix{bits: <<1, 1, 1, 1, 1::size(1)>>, maxlen: 32})
-      %PrefixError{id: :decode, detail: %Prefix{bits: <<1, 1, 1, 1, 1::size(1)>>, maxlen: 32}}
-
-      iex> decode({1, 2, 3, 4, 5})
-      %PrefixError{id: :decode, detail: {1, 2, 3, 4, 5}}
 
       # an exception as argument is passed through
       iex> decode(%PrefixError{id: :func_x, detail: "some error"})
@@ -193,11 +171,14 @@ defmodule Prefix.IP do
   """
   @impl Prefix
   @spec decode(Prefix.t() | :inet.ip_address() | digits()) :: String.t() | PrefixError.t()
-  def decode(prefix) when prefix4?(prefix),
-    do: Prefix.format(prefix)
+  def decode(%Prefix{bits: <<@ip4, bits::bitstring>>, maxlen: 33}),
+    do: Prefix.format(%Prefix{bits: bits, maxlen: 32})
 
-  def decode(prefix) when prefix6?(prefix) do
-    {digits, len} = Prefix.digits(prefix, 16)
+  def decode(%Prefix{bits: <<@ip6, bits::bitstring>>, maxlen: 129}) do
+    {digits, len} =
+      %Prefix{bits: bits, maxlen: 128}
+      |> Prefix.digits(16)
+
     pfx = :inet.ntoa(digits)
     if len < 128, do: "#{pfx}/#{len}", else: pfx
   end
@@ -220,42 +201,4 @@ defmodule Prefix.IP do
 
   def decode(x) when is_exception(x), do: x
   def decode(x), do: error(:decode, x)
-
-  @doc """
-  Returns an atom indicating the adress family for `prefix` or
-  an exception struct on any error.
-
-  ## Examples
-
-      iex> af_family(%Prefix{bits: <<1, 1, 1>>, maxlen: 32})
-      :ip4
-
-      iex> af_family({{1,1,1,0}, 24})
-      :ip4
-
-      iex> af_family(%Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128})
-      :ip6
-
-      iex> af_family({{44252, 6518, 0, 0, 0, 0, 0, 0}, 32})
-      :ip6
-
-      # invalid prefixes yield an exception struct
-      iex> af_family(%Prefix{bits: <<>>, maxlen: -1})
-      %PrefixError{id: :af_family, detail: %Prefix{bits: <<>>, maxlen: -1}}
-
-      iex> af_family({{1, 1, 1, 1}, 33})
-      %PrefixError{id: :af_family, detail: {{1, 1, 1, 1}, 33}}
-
-      # an exception as argument is passed through
-      iex> af_family(%PrefixError{id: :func_x, detail: "some error"})
-      %PrefixError{id: :func_x, detail: "some error"}
-
-  """
-  @spec af_family(Prefix.t() | digits()) :: :ip4 | :ip6 | PrefixError.t()
-  def af_family(prefix) when prefix4?(prefix), do: :ip4
-  def af_family(prefix) when prefix6?(prefix), do: :ip6
-  def af_family({digits, len}) when dig4?(digits, len), do: :ip4
-  def af_family({digits, len}) when dig6?(digits, len), do: :ip6
-  def af_family(x) when is_exception(x), do: x
-  def af_family(x), do: error(:af_family, x)
 end
