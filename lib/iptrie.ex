@@ -60,8 +60,8 @@ defmodule Iptrie do
 
   def set(tree, {pfx, val}) do
     case encode(pfx) do
-      x when prefix4?(x) -> %{tree | ip4: Radix.set(tree.ip4, {x.bits, val})}
-      x when prefix6?(x) -> %{tree | ip6: Radix.set(tree.ip6, {x.bits, val})}
+      x when prefix4?(x) -> %{tree | ip4: Radix.set(tree.ip4, x.bits, val)}
+      x when prefix6?(x) -> %{tree | ip6: Radix.set(tree.ip6, x.bits, val)}
       x when is_exception(x) -> raise x
       _ -> raise PrefixError.new(:set, {pfx, val})
     end

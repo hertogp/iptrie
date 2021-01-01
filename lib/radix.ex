@@ -23,36 +23,12 @@ defmodule RadixError do
 end
 
 defmodule Radix do
-  # TODO:
-  # - hide functions internal to the Radix module
-  #   eg _get, _kvnew, _tree_pos
-  # - rename match to something like: _leaf_action (and make it private)
-  # - `all` -> returns all matches
-  # - `shortest` -> returns shortest prefix match
-  # - `shorter` -> all shorter matches (supernets) with option :inclusive
-  # - `longer` -> all longer matches (subnets) with option :inclusive
-  # - `get` -> get an exact match
-  # - `set` -> set an entry (based on exact match)
-  # - `exec` -> new name for traverse, runs func on nodes
-  # - `visit` -> same but inside a prefix
-  # - pairs -> yield key-pairs that differ only in their last bit
-  #
-  # - maybe split up traverse into specific order traversal functions, e.g.
-  #   :inorder -> inorder(tree, ..) etc ...
-  # - improve consistency in function and variable names
-  #   - _get to get a leaf
-  #   - get to 
-  # - ipt is the tree
-  # - leaf is the leaf node
-  # - kvs is the list of k,v-pairs
-  #
-  #
   @moduledoc """
   A path-compressed Patricia trie with one-way branching removed.
 
   The radix tree (with `r=2`)  has 2 types of nodes:
   - *internal* `{bit, left, right}`, where `bit` >= 0
-  - *leaf*     `{-1, [{key,value} ..]}`
+  - *leaf*     `[{key,value} ..]`
 
   where:
   - `bit` is the bit position to check in a key
@@ -77,8 +53,8 @@ defmodule Radix do
   ## Examples
 
       iex> t = new()
-      ...>     |> set({<<1, 1, 1>>, "1.1.1.0/24"})
-      ...>     |> set({<<1, 1, 1, 0::6>>, "1.1.1.0/30"})
+      ...>     |> set(<<1, 1, 1>>, "1.1.1.0/24")
+      ...>     |> set(<<1, 1, 1, 0::6>>, "1.1.1.0/30")
       iex>
       iex> lpm(t, <<1, 1, 1, 255>>)
       {<<1, 1, 1>>, "1.1.1.0/24"}
@@ -113,83 +89,6 @@ defmodule Radix do
   defp error(id, detail),
     do: RadixError.new(id, detail)
 
-  # - run down the tree and return the kvs of a leaf (might be nil) based on key-path
-  defp get_leaf(nil, _key), do: nil
-
-  defp get_leaf({-1, kvs}, _key), do: kvs
-
-  defp get_leaf({bit, l, r}, key) do
-    case(bit(key, bit)) do
-      0 -> get_leaf(l, key)
-      1 -> get_leaf(r, key)
-    end
-  end
-
-  # put inserts/updates a insert/update a {key,value}-pair into the tree using
-  # {pos, type}, where type denotes the type of action to take:split, :add or
-  # :update
-
-  # ran into an empty leaf, so take it
-  defp put(nil, _treepos, key, val), do: kvnew({key, val})
-
-  # follow path, insert somewhere in the left/right subtree
-  defp put({bit, l, r}, {pos, type}, key, val) when pos > bit do
-    case bit(key, bit) do
-      0 -> {bit, put(l, {pos, type}, key, val), r}
-      1 -> {bit, l, put(r, {pos, type}, key, val)}
-    end
-  end
-
-  # ran into a non-empty leaf.
-  defp put({-1, leaf}, {pos, type}, key, val) do
-    case type do
-      :split ->
-        # split tree, new key decides if it goes left or right
-        case bit(key, pos) do
-          0 -> {pos, kvnew({key, val}), {-1, leaf}}
-          1 -> {pos, {-1, leaf}, kvnew({key, val})}
-        end
-
-      :add ->
-        kvnew([{key, val} | leaf])
-
-      :update ->
-        {-1, Enum.map(leaf, fn {k, v} -> if k == key, do: {k, val}, else: {k, v} end)}
-    end
-  end
-
-  # pos <= bit and bit != -1, so at internal node
-  # :nomatch means split the tree
-  # :equal, :less, :more, :subnet, :supernet  means continue towards leaf
-  defp put({bit, l, r}, {pos, type}, key, val) do
-    case type do
-      :split ->
-        # split the tree, the new key decides new left or right leaf
-        case bit(key, pos) do
-          0 -> {pos, kvnew({key, val}), {bit, l, r}}
-          1 -> {pos, {bit, l, r}, kvnew({key, val})}
-        end
-
-      _ ->
-        # otherwise -> continue path towards leaf
-        put({bit, l, r}, {bit + 1, type}, key, val)
-    end
-  end
-
-  # compare two {k,v}-pairs based on their keys
-  # def compare({k1, _v1}, {k2, _v2}), do: compare(k1, k2)
-
-  # # compare two keys directly
-  # def compare(key1, key2) do
-  #   cond do
-  #     key1 == key2 -> :eq
-  #     bit_size(key1) < bit_size(key2) -> :lt
-  #     bit_size(key1) > bit_size(key2) -> :gt
-  #     key1 < key2 -> :lt
-  #     true -> :gt
-  #   end
-  # end
-
   # bit
   # - extract the value of a bit in a key
   # - bits beyond the key-length are considered `0`
@@ -200,104 +99,143 @@ defmodule Radix do
     bit
   end
 
-  # diffbit
+  # follow key-path and return a leaf (which might be nil)
+  # - inlining bit check doesn't really speed things up
+  defp leaf({bit, l, r}, key) do
+    case(bit(key, bit)) do
+      0 -> leaf(l, key)
+      1 -> leaf(r, key)
+    end
+  end
+
+  defp leaf(leaf, _key), do: leaf
+
+  # action to take given a new, candidate key and a leaf:
+  #  :take   if the leaf is nil and thus free
+  #  :update if the candidate key is already present in the leaf
+  #  :add    if the candidate shares the leaf's common prefix
+  #  :split  if the candidate does not share the leaf's common prefix
+  defp action(nil, _key), do: :take
+
+  defp action([{k, _v} | _tail] = leaf, key) do
+    pad1 = max(0, bit_size(key) - bit_size(k))
+    pad2 = max(0, bit_size(k) - bit_size(key))
+
+    case <<k::bitstring, 0::size(pad1)>> == <<key::bitstring, 0::size(pad2)>> do
+      false -> :split
+      true -> if List.keyfind(leaf, key, 0) == nil, do: :add, else: :update
+    end
+  end
+
+  # Say whether `k` is a prefix of `key`
+  defp is_prefix?(k, key) when bit_size(k) > bit_size(key), do: false
+
+  defp is_prefix?(k, key) do
+    len = bit_size(k)
+    <<key::bitstring-size(len), _::bitstring>> = key
+    k == key
+  end
+
+  # Tree modifications
+
+  # put
+  # - inserts/updates a {key,value}-pair into the tree
+  # - pos is maximum depth to travel down the tree
+
+  # max depth exceeded, so split the tree here
+  defp put({bit, _l, _r} = node, pos, key, val) when pos < bit do
+    case bit(key, pos) do
+      0 -> {pos, [{key, val}], node}
+      1 -> {pos, node, [{key, val}]}
+    end
+  end
+
+  # insert somewhere in the left/right subtree
+  defp put({bit, l, r}, pos, key, val) do
+    case bit(key, bit) do
+      0 -> {bit, put(l, pos, key, val), r}
+      1 -> {bit, l, put(r, pos, key, val)}
+    end
+  end
+
+  # ran into a leaf
+  defp put(leaf, pos, key, val) do
+    case action(leaf, key) do
+      :take ->
+        [{key, val}]
+
+      :split ->
+        # split tree, new key decides if it goes left or right
+        case bit(key, pos) do
+          0 -> {pos, [{key, val}], leaf}
+          1 -> {pos, leaf, [{key, val}]}
+        end
+
+      :add ->
+        [{key, val} | leaf] |> List.keysort(0) |> Enum.reverse()
+
+      :update ->
+        List.keyreplace(leaf, key, 0, {key, val})
+    end
+  end
+
+  # differ
   # - find the first bit where two keys differ
   # - for two equal keys, the last bit position is returned.
   # - returns the last bitpos if one key is a shorter prefix of the other
   #   in which case they both should belong to the same leaf.
   # the bit position is used to determine where a k,v-pair is stored in the tree
 
-  # for a k,v-list of a leaf, we only need to check the first/longest key
-  defp diffbit([{k, _v} | _leaf], key), do: diffbit(0, k, key)
+  # a leaf, only need to check the first/longest key
+  defp differ([{k, _v} | _leaf], key), do: differ(0, k, key)
 
-  defp diffbit(k, key), do: diffbit(0, k, key)
+  defp differ(k, key), do: differ(0, k, key)
 
-  # guards stop the recursion when longest key is exhausted
-  defp diffbit(pos, k, key) when pos < bit_size(k) or pos < bit_size(key) do
+  # stop recursion once longest key is exhausted
+  defp differ(pos, k, key) when pos < bit_size(k) or pos < bit_size(key) do
     case bit(key, pos) == bit(k, pos) do
-      true -> diffbit(pos + 1, k, key)
+      true -> differ(pos + 1, k, key)
       false -> pos
     end
   end
 
   # keep pos if outside both keys
-  defp diffbit(pos, _key1, _key2), do: pos
+  defp differ(pos, _key1, _key2), do: pos
 
   # get key's position in the tree: {bitpos, match-type}
-  defp tree_pos(bst, key) do
-    case get_leaf(bst, key) do
-      nil ->
-        {bit_size(key) - 1, :nomatch}
-
-      leaf ->
-        {diffbit(leaf, key), kvmatch(leaf, key)}
-    end
-  end
-
-  # kvmatch
-  # - match a candidate key against the keys of a leaf, yields one of:
-  # :update if the candidate key is already present in the leaf
-  # :add    if the candidate shares the leaf's common prefix
-  # :split  if the candidate does not share the leaf's common prefix
-  # - note we run through the entire list in order to detect k1==k2
-  # - TODO: we can cut short when the leaf's key is shorter than the new key
-  #   1/30, 1/24, 1/16, 1/8: when checking for 1/25 and we see 1/24 we know
-  #   the 1/25 key can be added and there's no point in checking further.
-  defp kvmatch([], _k2), do: :add
-
-  defp kvmatch([{k1, _v} | _], k2) when k1 == k2, do: :update
-
-  defp kvmatch([{k1, _v} | tail], k2) do
-    # expands the smallest key to match size of larger key
-    # when that matches one key is a prefix of the other key
-    pad1 = max(0, bit_size(k2) - bit_size(k1))
-    pad2 = max(0, bit_size(k1) - bit_size(k2))
-
-    case <<k1::bitstring, 0::size(pad1)>> == <<k2::bitstring, 0::size(pad2)>> do
-      false -> :split
-      true -> kvmatch(tail, k2)
-    end
-  end
-
-  # create new k,v-pair list for a leaf
-  # TODO: should return only the list, not the leaf
-  # `-> refactor calls to this function
-  defp kvnew({k, v}), do: {-1, [{k, v}]}
-  defp kvnew(l) when is_list(l), do: {-1, Enum.sort(l, &kvsort/2)}
-
-  # kvget
-  # - get first k,v-pair of a leaf where `k` is a prefix of `key`
-  # - list is sorted on key-length in descending order -> gets the longest match
-  defp kvget([], _key), do: nil
-  defp kvget([{k, _v} | tail], key) when bit_size(k) > bit_size(key), do: kvget(tail, key)
-  defp kvget([{k, v} | _tail], key) when k == key, do: {k, v}
-
-  defp kvget([{k, v} | tail], key) do
-    len = bit_size(k)
-    <<key::bitstring-size(len), _::bitstring>> = key
-
-    case k == key do
-      true -> {k, v}
-      false -> kvget(tail, key)
-    end
-  end
-
-  # helper to sort leaf k,v-pairs on bit_size(k) in descending order
-  defp kvsort({k1, _v1}, {k2, _v2}) do
-    cond do
-      # k1 == k2 -> true
-      bit_size(k1) < bit_size(k2) -> false
-      true -> true
+  defp position(bst, key) do
+    case leaf(bst, key) do
+      nil -> bit_size(key) - 1
+      leaf -> differ(leaf, key)
     end
   end
 
   # API
 
+  @doc """
+  Return a new Iptrie.
+
+  Optionally, a list of `{key,value}`-pairs can be passed in for initialization,
+  where `key` is a bitstring.
+
+  ## Examples
+
+      iex> new()
+      {0, nil, nil}
+
+      iex> elements = [{<<1, 1>>, 16}, {<<1, 1, 1, 1>>, 32}, {<<1, 1, 0>>, 24}]
+      iex> new(elements)
+      {0,
+        {23, [{<<1, 1, 0>>, 24}, {<<1, 1>>, 16}],
+             [{<<1, 1, 1, 1>>, 32}]},
+        nil
+      }
+  """
   @spec new :: {0, nil, nil}
   def new, do: @empty
 
   def new(kvs) when is_list(kvs) do
-    Enum.reduce(kvs, @empty, fn kv, t -> set(t, kv) end)
+    Enum.reduce(kvs, @empty, fn {k, v}, t -> set(t, k, v) end)
   end
 
   @doc """
@@ -309,13 +247,18 @@ defmodule Radix do
       iex> ipt = new(elements)
       iex> get(ipt, <<1, 1, 1>>)
       {<<1, 1, 1>>, 24}
+      iex> get(ipt, <<1, 1>>)
+      {<<1, 1>>, 16}
+      iex> get(ipt, <<1, 1, 0::1>>)
+      nil
 
   """
   @spec get(any, bitstring()) :: {bitstring(), term} | nil
   def get(t, key) do
-    t
-    |> get_leaf(key)
-    |> List.keyfind(key, 0)
+    case leaf(t, key) do
+      nil -> nil
+      leaf -> List.keyfind(leaf, key, 0)
+    end
   end
 
   @doc """
@@ -324,29 +267,81 @@ defmodule Radix do
   ## Example
 
       iex> elements = [{<<1, 1>>, "1.1.0.0/16"}, {<<1, 1, 1, 1>>, "x.x.x.x"}]
-      iex> ipt = new() |> set(elements)
-      {0,
-        {23, {-1, [{<<1, 1>>, "1.1.0.0/16"}]},
-             {-1, [{<<1, 1, 1, 1>>, "x.x.x.x"}]}},
-        nil
-      }
+      iex> ipt = new(elements)
       iex> # fix the x's
-      iex> ipt = set(ipt, {<<1, 1, 1, 1>>, "1.1.1.1"})
+      iex> ipt = set(ipt, <<1, 1, 1, 1>>, "1.1.1.1")
       iex> ipt
       {0,
-        {23, {-1, [{<<1, 1>>, "1.1.0.0/16"}]},
-             {-1, [{<<1, 1, 1, 1>>, "1.1.1.1"}]}},
+        {23, [{<<1, 1>>, "1.1.0.0/16"}],
+             [{<<1, 1, 1, 1>>, "1.1.1.1"}]},
         nil
       }
 
   """
-  def set(tree, element_or_elements)
-  def set(tree, {key, val}), do: put(tree, tree_pos(tree, key), key, val)
+  def set(tree, key, val), do: put(tree, position(tree, key), key, val)
 
   # for convenience: add a list of [{k,v},...] to a tree
   def set(tree, elements) when is_list(elements) do
-    Enum.reduce(elements, tree, fn elm, t -> set(t, elm) end)
+    Enum.reduce(elements, tree, fn {k, v}, t -> set(t, k, v) end)
   end
+
+  @doc """
+  Delete a `{key, value}`-pair for given `key`.
+
+  Uses an exact match.
+
+  ## Examples
+
+      iex> elms = [{<<1,1>>, 16}, {<<1,1,0>>, 24}, {<<1,1,1,1>>, 32}]
+      iex> t = new(elms)
+      iex> t
+      {0, {23, [{<<1, 1, 0>>, 24}, {<<1, 1>>, 16}],
+               [{<<1, 1, 1, 1>>, 32}]
+           },
+        nil}
+      iex>
+      iex> del(t, <<1, 1, 0>>)
+      {0, {23, [{<<1, 1>>, 16}],
+               [{<<1, 1, 1, 1>>, 32}]
+           },
+        nil}
+      iex>
+      iex> del(t, <<1, 1, 0>>) |> del(<<1, 1>>)
+      {0, [{<<1, 1, 1, 1>>, 32}],
+          nil}
+      iex>
+      iex> del(t, <<1, 1, 0>>) |> del(<<1, 1>>) |> del(<<1, 1, 1, 1>>)
+      {0, nil, nil}
+
+
+  """
+  def del(tree, keys) when is_list(keys),
+    do: Enum.reduce(keys, tree, fn k, t -> del(t, k) end)
+
+  def del({bit, l, r}, key) do
+    case bit(key, bit) do
+      0 -> del({bit, del(l, key), r})
+      1 -> del({bit, l, del(r, key)})
+    end
+  end
+
+  # key wasn't in the tree
+  def del(nil, _key), do: nil
+
+  # key leads to leaf
+  def del(leaf, key) do
+    case List.keydelete(leaf, key, 0) do
+      [] -> nil
+      leaf -> leaf
+    end
+  end
+
+  # always keep the root, eliminate empty nodes and promote half-empty nodes
+  defp del({0, l, r}), do: {0, l, r}
+  defp del({_, nil, nil}), do: nil
+  defp del({_, l, nil}), do: l
+  defp del({_, nil, r}), do: r
+  defp del({bit, l, r}), do: {bit, l, r}
 
   # get the longest prefix match for binary key
   # - follow tree path using key and get longest match from the leaf found
@@ -359,16 +354,16 @@ defmodule Radix do
 
   ## Example
 
-      iex> elements = [{<<1, 1>>, "1.1.0.0/16"}, {<<1, 1, 1, 1>>, "1.1.1.1"}]
-      iex> t = new(elements)
-      iex> lpm(t, <<1, 1, 2, 2>>)
-      {<<1, 1>>, "1.1.0.0/16"}
+      iex> elms = [{<<1, 1>>, 16}, {<<1, 1, 0>>, 24}, {<<1, 1, 0, 0::1>>, 25}]
+      iex> t = new(elms)
+      iex> lpm(t, <<1, 1, 0, 127>>)
+      {<<1, 1, 0, 0::1>>, 25}
+      iex> lpm(t, <<1, 1, 0, 128>>)
+      {<<1, 1, 0>>, 24}
       iex> lpm(t, <<1, 1, 1, 1>>)
-      {<<1, 1, 1, 1>>, "1.1.1.1"}
+      {<<1, 1>>, 16}
 
   """
-  def lpm(nil, _key), do: nil
-
   def lpm({b, l, r}, key) do
     case bit(key, b) do
       0 ->
@@ -382,15 +377,71 @@ defmodule Radix do
     end
   end
 
-  def lpm({-1, kvs}, key), do: kvget(kvs, key)
-  def lpm(x) when is_exception(x), do: x
+  def lpm(nil, _key), do: nil
+  def lpm(leaf, key), do: Enum.find(leaf, fn {k, _} -> is_prefix?(k, key) end)
+  # def lpm(leaf, key), do: llpm(leaf, key)
 
+  @doc """
+  Return all prefix matches for given key.
+
+  ## Example
+
+      iex> elms = [{<<1, 1>>, 16}, {<<1, 1, 0>>, 24}, {<<1, 1, 0, 0>>, 32}, {<<1, 1, 1, 1>>, 32}]
+      iex> t = new(elms)
+      iex> apm(t, <<1, 1, 1, 1>>)
+      [{<<1, 1, 1, 1>>, 32}, {<<1, 1>>, 16}]
+      iex>
+      iex> apm(t, <<1, 1, 0>>)
+      [{<<1, 1, 0>>, 24}, {<<1, 1>>, 16}]
+
+  """
+  def apm({b, l, r}, key) do
+    case bit(key, b) do
+      0 -> apm(l, key)
+      1 -> apm(r, key) ++ apm(l, key)
+    end
+  end
+
+  def apm(nil, _), do: []
+  def apm(leaf, key), do: Enum.filter(leaf, fn {k, _} -> is_prefix?(k, key) end)
+
+  @doc """
+  Return all reversed prefix matches.
+
+  This returns all `{k,v}`-pairs where search `key` is a prefix of `k`
+
+  ## Example
+
+      iex> elms = [{<<1, 1>>, 16}, {<<1, 1, 0>>, 24}, {<<1, 1, 0, 0>>, 32}, {<<1, 1, 1, 1>>, 32}]
+      iex> t = new(elms)
+      iex> rpm(t, <<1, 1, 0>>)
+      [{<<1, 1, 0, 0>>, 32}, {<<1, 1, 0>>, 24}]
+      iex>
+      iex> rpm(t, <<1, 1, 1>>)
+      [{<<1, 1, 1, 1>>, 32}]
+      iex>
+      iex> rpm(t, <<2>>)
+      []
+  """
+  def rpm({b, l, r}, key) when bit_size(key) < b do
+    rpm(r, key) ++ rpm(l, key)
+  end
+
+  def rpm({b, l, r}, key) do
+    case bit(key, b) do
+      0 -> rpm(l, key)
+      1 -> rpm(r, key) ++ rpm(l, key)
+    end
+  end
+
+  def rpm(nil, _), do: []
+  def rpm(leaf, key), do: Enum.filter(leaf, fn {k, _} -> is_prefix?(key, k) end)
   # TRAVERSALs
 
   def to_list(bst), do: to_list(bst, [])
-  defp to_list({_bit, l, r}, acc), do: to_list(l, acc) ++ to_list(r, [])
-  defp to_list({-1, leaf}, acc), do: leaf ++ acc
   defp to_list(nil, acc), do: acc
+  defp to_list({_bit, l, r}, acc), do: to_list(l, acc) ++ to_list(r, [])
+  defp to_list(leaf, acc), do: leaf ++ acc
 
   @doc """
   Traverse the tree in `order`, one of (`:inorder`, `:preorder` or
@@ -426,6 +477,6 @@ defmodule Radix do
     end
   end
 
-  def traverse(acc, fun, nil, _order), do: fun.(acc, nil)
-  def traverse(acc, fun, {-1, leaf}, _order), do: fun.(acc, leaf)
+  # def traverse(acc, fun, nil, _order), do: fun.(acc, nil)
+  def traverse(acc, fun, leaf, _order), do: fun.(acc, leaf)
 end
