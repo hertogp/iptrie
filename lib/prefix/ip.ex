@@ -32,10 +32,6 @@ defmodule Prefix.IP do
   """
   @type digits :: digits4() | digits6()
 
-  # Markers
-  @ip4 <<0::1>>
-  @ip6 <<1::1>>
-
   # GUARDS
 
   # guards for {digits, len}
@@ -86,10 +82,10 @@ defmodule Prefix.IP do
   ## Examples
 
       iex> encode("1.1.1.0/24")
-      %Prefix{bits: <<0::1, 1, 1, 1>>, maxlen: 33}
+      %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
 
       iex> encode("acdc:1976::/32")
-      %Prefix{bits: <<1::1, 0xacdc::16, 0x1976::16>>, maxlen: 129}
+      %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128}
 
   """
 
@@ -126,18 +122,16 @@ defmodule Prefix.IP do
   def encode(digits) when ip6?(digits), do: encode({digits, 128})
 
   def encode({digits = {a, b, c, d}, len}) when dig4?(digits, len) do
-    len = len + 1
-    <<bits::bitstring-size(len), _::bitstring>> = <<@ip4, a::8, b::8, c::8, d::8>>
-    %Prefix{bits: bits, maxlen: 33}
+    <<bits::bitstring-size(len), _::bitstring>> = <<a::8, b::8, c::8, d::8>>
+
+    %Prefix{bits: bits, maxlen: 32}
   end
 
   def encode({digits = {a, b, c, d, e, f, g, h}, len}) when dig6?(digits, len) do
-    len = len + 1
-
     <<bits::bitstring-size(len), _::bitstring>> =
-      <<@ip6, a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>>
+      <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>>
 
-    %Prefix{bits: bits, maxlen: 129}
+    %Prefix{bits: bits, maxlen: 128}
   end
 
   def encode(x) when is_exception(x), do: x
@@ -157,7 +151,7 @@ defmodule Prefix.IP do
       iex> decode({1, 1, 1, 1})
       "1.1.1.1"
 
-      iex> decode(%Prefix{bits: <<0::1, 1, 1, 1>>, maxlen: 33})
+      iex> decode(%Prefix{bits: <<1, 1, 1>>, maxlen: 32})
       "1.1.1.0/24"
 
       # Note: mask is *not* applied when using `{digits, len}`-format
@@ -171,10 +165,10 @@ defmodule Prefix.IP do
   """
   @impl Prefix
   @spec decode(Prefix.t() | :inet.ip_address() | digits()) :: String.t() | PrefixError.t()
-  def decode(%Prefix{bits: <<@ip4, bits::bitstring>>, maxlen: 33}),
+  def decode(%Prefix{bits: <<bits::bitstring>>, maxlen: 32}),
     do: Prefix.format(%Prefix{bits: bits, maxlen: 32})
 
-  def decode(%Prefix{bits: <<@ip6, bits::bitstring>>, maxlen: 129}) do
+  def decode(%Prefix{bits: <<bits::bitstring>>, maxlen: 128}) do
     {digits, len} =
       %Prefix{bits: bits, maxlen: 128}
       |> Prefix.digits(16)

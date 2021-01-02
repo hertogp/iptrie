@@ -316,9 +316,7 @@ defmodule Prefix do
       iex> band(y,x)
       %Prefix{bits: <<128, 129, 0, 0>>, maxlen: 32}
 
-
   """
-
   def band(prefix1, prefix2) when valid?(prefix1, prefix2) do
     width = max(bit_size(prefix1.bits), bit_size(prefix2.bits))
     x = cast_int(prefix1.bits, width)
@@ -611,7 +609,7 @@ defmodule Prefix do
   end
 
   @doc """
-  subdivide a *prefix* into a list of smaller pieces, each *newlen* bits long.
+  Subdivide a *prefix* into a list of smaller pieces, each *newlen* bits long.
 
   Turn a prefix into a list of subsequent smaller prefixes.  *newlen* must be
   larger than or equal to the prefix' current bit length, else it is considered
@@ -812,27 +810,18 @@ defmodule Prefix do
       iex> new(<<>>, 32) |> offset(1)
       %Prefix{bits: <<>>, maxlen: 32}
 
-      # when skipping bits
-      iex> new(<<1, 255, 0>>, 32) |> offset(256)
-      %Prefix{bits: <<2, 0, 0>>, maxlen: 32}
-      iex>
-      iex> # but when skipping the first 8 bits:
-      iex> new(<<1, 255, 0>>, 32) |> offset(256, 8)
-      %Prefix{bits: <<1, 0, 0>>, maxlen: 32}
-
   """
   @spec offset(t, integer) :: t | PrefixError.t()
-  def offset(prefix, offset, skip \\ 0)
+  def offset(prefix, offset) when valid?(prefix) do
+    bsize = bit_size(prefix.bits)
+    x = cast_int(prefix.bits, bit_size(prefix.bits))
+    x = x + offset
 
-  def offset(x, offset, skip) when valid?(x) and -1 < skip and skip <= bit_size(x.bits) do
-    len = bit_size(x.bits) - skip
-    <<keep::size(skip), n::size(len)>> = x.bits
-    n = n + offset
-    %{x | bits: <<keep::size(skip), n::size(len)>>}
+    %Prefix{prefix | bits: <<x::size(bsize)>>}
   end
 
-  def offset(x, _, _) when is_exception(x), do: x
-  def offset(x, o, s), do: error(:offset, {x, o, s})
+  def offset(x, _) when is_exception(x), do: x
+  def offset(x, o), do: error(:offset, {x, o})
 
   @doc """
   The 'size' of a prefix as determined by its *missing* bits.

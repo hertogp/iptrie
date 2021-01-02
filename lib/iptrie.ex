@@ -194,11 +194,14 @@ defmodule Iptrie do
       iex> jump("0.0.0.0", -1)
       "255.255.255.255"
 
+      iex> jump("255.255.255.255", 1)
+      "0.0.0.0"
+
   """
   def jump(prefix, n) do
     prefix
     |> encode()
-    |> offset(n, 1)
+    |> offset(n)
     |> decode()
   end
 
