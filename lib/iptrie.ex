@@ -171,11 +171,9 @@ defmodule Iptrie do
   """
   def neighbor(prefix) do
     x = encode(prefix)
+    n = 1 - 2 * bit(x, bit_size(x.bits) - 1)
 
-    case bit(x, bit_size(x.bits) - 1) do
-      0 -> offset(x, 1)
-      1 -> offset(x, -1)
-    end
+    offset(x, n)
     |> decode()
   end
 
