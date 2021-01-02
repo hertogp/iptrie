@@ -294,6 +294,9 @@ defmodule Prefix do
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
 
+  def bnot(x) when is_exception(x), do: x
+  def bnot(x), do: error(:bnot, x)
+
   @doc """
   Return a bitwise AND of two prefixes.
 
@@ -316,6 +319,10 @@ defmodule Prefix do
     z = x &&& y
     %Prefix{prefix1 | bits: <<z::size(width)>>}
   end
+
+  def band(x, _) when is_exception(x), do: x
+  def band(_, x) when is_exception(x), do: x
+  def band(x, y), do: error(:band, {x, y})
 
   @doc """
   Return a bitwise OR of the prefixes.
@@ -345,6 +352,10 @@ defmodule Prefix do
     %Prefix{prefix1 | bits: <<z::size(width)>>}
   end
 
+  def bor(x, _) when is_exception(x), do: x
+  def bor(_, x) when is_exception(x), do: x
+  def bor(x, y), do: error(:bor, {x, y})
+
   @doc """
   Return a bitwise XOR of the prefixes.
 
@@ -372,6 +383,10 @@ defmodule Prefix do
     %Prefix{prefix1 | bits: <<z::size(width)>>}
   end
 
+  def bxor(x, _) when is_exception(x), do: x
+  def bxor(_, x) when is_exception(x), do: x
+  def bxor(x, y), do: error(:bxor, {x, y})
+
   @doc """
   Rotate the prefix bits n-positions
 
@@ -392,7 +407,7 @@ defmodule Prefix do
     brot(prefix, plen + rem(shift, plen))
   end
 
-  def brot(prefix, shift) do
+  def brot(prefix, shift) when valid?(prefix) do
     width = bit_size(prefix.bits)
     shift = rem(shift, width)
     x = cast_int(prefix.bits, width)
@@ -402,6 +417,10 @@ defmodule Prefix do
     lw = width - shift
     %Prefix{prefix | bits: <<r::size(shift), l::size(lw)>>}
   end
+
+  def brot(x, _) when is_exception(x), do: x
+  def brot(_, x) when is_exception(x), do: x
+  def brot(x, y), do: error(:brot, {x, y})
 
   @doc """
   Arithmetic shift left for prefix.
@@ -415,12 +434,16 @@ defmodule Prefix do
       %Prefix{bits: <<0, 64>>, maxlen: 32}
 
   """
-  def bsl(prefix, shift) do
+  def bsl(prefix, shift) when valid?(prefix) do
     width = bit_size(prefix.bits)
     x = cast_int(prefix.bits, width)
     x = x <<< shift
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
+
+  def bsl(x, _) when is_exception(x), do: x
+  def bsl(_, x) when is_exception(x), do: x
+  def bsl(x, y), do: error(:bsl, {x, y})
 
   @doc """
   Arithmetic shift right for prefix.
@@ -440,6 +463,9 @@ defmodule Prefix do
     x = x >>> shift
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
+
+  def bsr(x) when is_exception(x), do: x
+  def bsr(x), do: error(:bsr, x)
 
   @doc """
   Right pad the *prefix* with *nbits* of `0` or `1`'s.
@@ -465,10 +491,10 @@ defmodule Prefix do
       %Prefix{bits: <<1, 2, 0, 0>>, maxlen: 32}
 
   """
-  def padr(x), do: padr(x, 0, x.maxlen)
-  def padr(x, bit), do: padr(x, bit, x.maxlen)
+  def padr(x) when valid?(x), do: padr(x, 0, x.maxlen)
+  def padr(x, bit) when valid?(x), do: padr(x, bit, x.maxlen)
 
-  def padr(prefix, bit, nbits) do
+  def padr(prefix, bit, nbits) when valid?(prefix) do
     bsize = bit_size(prefix.bits)
     nbits = min(nbits, prefix.maxlen - bsize)
     width = bsize + nbits
@@ -477,6 +503,9 @@ defmodule Prefix do
 
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
+
+  def padr(x, _, _) when is_exception(x), do: x
+  def padr(x, b, n), do: error(:padr, {x, b, n})
 
   @doc """
   Left pad a *prefix* with *nbits* of `0` or `1`'s.
@@ -498,7 +527,7 @@ defmodule Prefix do
   def padl(x) when valid?(x), do: padl(x, 0, x.maxlen)
   def padl(x, bit) when valid?(x), do: padl(x, bit, x.maxlen)
 
-  def padl(prefix, bit, nbits) do
+  def padl(prefix, bit, nbits) when valid?(prefix) do
     bsize = bit_size(prefix.bits)
     nbits = min(nbits, prefix.maxlen - bsize)
     y = if bit == 0, do: 0, else: (1 <<< nbits) - 1
@@ -506,6 +535,9 @@ defmodule Prefix do
 
     %Prefix{prefix | bits: <<y::size(nbits), x::size(bsize)>>}
   end
+
+  def padl(x, _, _) when is_exception(x), do: x
+  def padl(x, b, n), do: error(:padl, {x, b, n})
 
   @doc """
   Subdivide a *prefix* into a list of smaller pieces, each *newlen* bits long.
@@ -777,8 +809,10 @@ defmodule Prefix do
       # a full prefix always returns itself
       iex> new(<<10, 10, 10, 10>>, 32) |> member(0)
       %Prefix{bits: <<10, 10, 10, 10>>, maxlen: 32}
+
       iex> new(<<10, 10, 10, 10>>, 32) |> member(1)
       %Prefix{bits: <<10, 10, 10, 10>>, maxlen: 32}
+
       iex> new(<<10, 10, 10, 10>>, 32) |> member(-1)
       %Prefix{bits: <<10, 10, 10, 10>>, maxlen: 32}
 
