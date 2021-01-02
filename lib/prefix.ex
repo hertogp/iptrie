@@ -231,6 +231,14 @@ defmodule Prefix do
   defp maybe_padding(pfx, max, true), do: padright(pfx, max)
   defp maybe_padding(pfx, _, _), do: pfx
 
+  # cast a series of bits to a number, width bits wide.
+  # - used for the binary ops on prefixes
+  defp cast_int(bits, width) do
+    bsize = bit_size(bits)
+    <<x::size(bsize)>> = bits
+    x <<< (width - bsize)
+  end
+
   # Creation
 
   @doc """
@@ -275,6 +283,8 @@ defmodule Prefix do
   def bit(x, _) when is_exception(x), do: x
   def bit(x, p), do: error(:bit, {x, p})
 
+  # Helper
+
   @doc """
   Return a bitwise NOT of the prefix.
 
@@ -297,33 +307,56 @@ defmodule Prefix do
   end
 
   @doc """
-  Return a bitwise AND of the prefix.
+  Return a bitwise AND of two prefixes.
 
   ## Example
 
-      iex> x = new(<<10, 11, 255, 128>>, 32)
-      iex> y = new(<<255, 255, 255, 0>>, 32)
+      iex> x = new(<<128, 129, 130, 131>>, 32)
+      iex> y = new(<<255, 255>>, 32)
+      iex>
       iex> band(x, y)
-      %Prefix{bits: <<10, 11, 255, 0>>, maxlen: 32}
+      %Prefix{bits: <<128, 129, 0, 0>>, maxlen: 32}
+      iex>
+      iex> band(y,x)
+      %Prefix{bits: <<128, 129, 0, 0>>, maxlen: 32}
+
 
   """
-  def band(prefix1, prefix2) when valid?(prefix1) and valid?(prefix2) do
-    x =
-      for <<b::size(1) <- prefix1.bits>> do
-        b
-      end
 
-    y =
-      for <<b::size(1) <- prefix2.bits>> do
-        b
-      end
+  def band(prefix1, prefix2) when valid?(prefix1, prefix2) do
+    width = max(bit_size(prefix1.bits), bit_size(prefix2.bits))
+    x = cast_int(prefix1.bits, width)
+    y = cast_int(prefix2.bits, width)
+    z = x &&& y
+    %Prefix{prefix1 | bits: <<z::size(width)>>}
+  end
 
-    z =
-      Enum.zip(x, y)
-      |> Enum.map(fn {x, y} -> x * y end)
-      |> Enum.reduce(<<>>, fn x, acc -> <<acc::bitstring, x::size(1)>> end)
+  @doc """
+  Return a bitwise OR of the prefixes.
 
-    %Prefix{prefix1 | bits: z}
+  ## Example
+
+      iex> x = new(<<10, 11, 12, 13>>, 32)
+      iex> y = new(<<0, 0, 255, 255>>, 32)
+      iex> bor(x, y)
+      %Prefix{bits: <<10, 11, 255, 255>>, maxlen: 32}
+
+      iex> x = new(<<10, 11, 12, 13>>, 32)
+      iex> y = new(<<255, 255>>, 32)
+      iex> bor(x, y)
+      %Prefix{bits: <<255, 255, 12, 13>>, maxlen: 32}
+      iex>
+      iex> bor(y, x)
+      %Prefix{bits: <<255, 255, 12, 13>>, maxlen: 32}
+
+
+  """
+  def bor(prefix1, prefix2) when valid?(prefix1, prefix2) do
+    width = max(bit_size(prefix1.bits), bit_size(prefix2.bits))
+    x = cast_int(prefix1.bits, width)
+    y = cast_int(prefix2.bits, width)
+    z = x ||| y
+    %Prefix{prefix1 | bits: <<z::size(width)>>}
   end
 
   @doc """
