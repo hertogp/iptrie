@@ -169,6 +169,8 @@ defmodule Iptrie do
       iex> mask("1.1.1.0/24")
       "255.255.255.0"
 
+      iex> mask("1.1.1.0/22")
+      "255.255.252.0"
   """
   def mask(prefix) do
     prefix
@@ -186,6 +188,9 @@ defmodule Iptrie do
 
       iex> inv_mask("1.1.1.0/24")
       "0.0.0.255"
+
+      iex> inv_mask("1.1.1.0/23")
+      "0.0.1.255"
 
   """
   def inv_mask(prefix) do
