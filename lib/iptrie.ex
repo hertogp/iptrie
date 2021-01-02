@@ -155,8 +155,8 @@ defmodule Iptrie do
   def inv_mask(prefix) do
     prefix
     |> encode()
-    |> replace(0, 0)
-    |> padright(1)
+    |> (&bxor(&1, &1)).()
+    |> padr(1)
     |> decode()
   end
 
