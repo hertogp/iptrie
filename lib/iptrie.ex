@@ -123,7 +123,7 @@ defmodule Iptrie do
   def network(prefix) do
     prefix
     |> encode()
-    |> padright(0)
+    |> padr()
     |> decode()
   end
 
@@ -142,7 +142,7 @@ defmodule Iptrie do
   def broadcast(prefix) do
     prefix
     |> encode()
-    |> padright(1)
+    |> padr(1)
     |> decode()
   end
 

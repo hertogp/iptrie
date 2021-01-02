@@ -441,42 +441,6 @@ defmodule Prefix do
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
 
-  # end
-  @doc """
-  Append bits to a prefix to achieve a desired length.
-
-  By default, `0`-bits are used, unless fill is a negative number.
-
-  Note: when "appending" to a shorter length, bits are actually removed.
-
-  ## Examples
-
-      iex> new(<<10, 10>>, 32) |> padright(25)
-      %Prefix{bits: <<10, 10, 0, 0::1>>, maxlen: 32}
-
-      iex> new(<<>>, 32) |> padright(24, 1) |> padright(32)
-      %Prefix{bits: <<255, 255, 255, 0>>, maxlen: 32}
-
-  """
-  def padright(x, 0) when valid?(x), do: padright(x, x.maxlen, 0)
-  def padright(x, 1) when valid?(x), do: padright(x, x.maxlen, 1)
-
-  @spec padright(t, pos_integer, 0..1) :: t
-  def padright(prefix, size, fill \\ 0)
-
-  def padright(prefix, size, fill) when size?(prefix, size) do
-    pad = size - bit_size(prefix.bits)
-    fill = if fill == 0, do: 0, else: -1
-
-    case pad > 0 do
-      true -> %{prefix | bits: <<prefix.bits::bitstring, fill::size(pad)>>}
-      false -> %{prefix | bits: <<prefix.bits::bitstring-size(size)>>}
-    end
-  end
-
-  def padright(x, _, _) when is_exception(x), do: x
-  def padright(x, s, f), do: error(:padright, {x, s, f})
-
   @doc """
   Right pad the *prefix* with *nbits* of `0` or `1`'s.
 
