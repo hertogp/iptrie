@@ -223,14 +223,6 @@ defmodule Prefix do
     end
   end
 
-  # maybe reverse a list during a pipeline
-  defp maybe_reverse(l, true), do: Enum.reverse(l)
-  defp maybe_reverse(l, _), do: l
-
-  # maybe pad the bitstring during a pipeline
-  defp maybe_padding(pfx, max, true), do: padright(pfx, max)
-  defp maybe_padding(pfx, _, _), do: pfx
-
   # cast a series of bits to a number, width bits wide.
   # - used for the binary ops on prefixes
   defp cast_int(bits, width) do
@@ -662,7 +654,7 @@ defmodule Prefix do
   @spec digits(t, pos_integer) :: {tuple(), pos_integer}
   def digits(prefix, width) when valid?(prefix) and width > 0 do
     prefix
-    |> padright(prefix.maxlen)
+    |> padr()
     |> fields(width)
     |> Enum.map(fn x -> elem(x, 0) end)
     |> List.to_tuple()
@@ -930,10 +922,10 @@ defmodule Prefix do
 
     bitstr =
       prefix
-      |> maybe_padding(prefix.maxlen, padding)
+      |> (fn x -> if padding, do: padr(x), else: x end).()
       |> fields(width)
       |> Enum.map(fn {n, _w} -> Integer.to_string(n, base) end)
-      |> maybe_reverse(reverse)
+      |> (fn x -> if reverse, do: Enum.reverse(x), else: x end).()
       |> Enum.chunk_every(unit)
       |> Enum.join(ssep)
 
