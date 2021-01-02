@@ -549,7 +549,7 @@ defmodule Prefix do
   ## Examples
 
       # break out the /26's in a /24
-      iex> new(<<10, 11, 12>>, 32)|> partition(26)
+      iex> new(<<10, 11, 12>>, 32)|> slice(26)
       [
         %Prefix{bits: <<10, 11, 12, 0::size(2)>>, maxlen: 32},
         %Prefix{bits: <<10, 11, 12, 1::size(2)>>, maxlen: 32},
@@ -558,8 +558,8 @@ defmodule Prefix do
       ]
 
   """
-  @spec partition(t, non_neg_integer) :: list(t)
-  def partition(prefix, newlen) when size?(prefix, newlen) and newlen >= bit_size(prefix.bits) do
+  @spec slice(t, non_neg_integer) :: list(t)
+  def slice(prefix, newlen) when size?(prefix, newlen) and newlen >= bit_size(prefix.bits) do
     width = newlen - bit_size(prefix.bits)
     max = (1 <<< width) - 1
 
@@ -568,8 +568,8 @@ defmodule Prefix do
     end
   end
 
-  def partition(x, _) when is_exception(x), do: x
-  def partition(x, n), do: error(:subdivide, {x, n})
+  def slice(x, _) when is_exception(x), do: x
+  def slice(x, n), do: error(:slice, {x, n})
 
   # Numbers
 
