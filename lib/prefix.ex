@@ -375,7 +375,6 @@ defmodule Prefix do
       iex> bxor(y, x)
       %Prefix{bits: <<245, 244, 12, 13>>, maxlen: 32}
 
-
   """
   def bxor(prefix1, prefix2) when valid?(prefix1, prefix2) do
     width = max(bit_size(prefix1.bits), bit_size(prefix2.bits))
@@ -414,6 +413,25 @@ defmodule Prefix do
     l = x >>> shift
     lw = width - shift
     %Prefix{prefix | bits: <<r::size(shift), l::size(lw)>>}
+  end
+
+  @doc """
+  Arithmetic shift left for prefix.
+
+  ## Example
+
+      iex> new(<<1, 2>>, 32) |> bsl(2)
+      %Prefix{bits: <<4, 8>>, maxlen: 32}
+
+      iex> new(<<1, 2>>, 32) |> bsl(-2)
+      %Prefix{bits: <<0, 64>>, maxlen: 32}
+
+  """
+  def bsl(prefix, shift) do
+    width = bit_size(prefix.bits)
+    x = cast_int(prefix.bits, width)
+    x = x <<< shift
+    %Prefix{prefix | bits: <<x::size(width)>>}
   end
 
   @doc """
