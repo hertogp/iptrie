@@ -706,38 +706,38 @@ defmodule Prefix do
   def undigits(d, l), do: error(:undigits, {d, l})
 
   @doc """
-  Increase or decrease a *prefix* with given *offset*.
+  Returns a sibling prefix at distance given by *offset*.
 
-  Increases or decreases the number represented by the *prefix* bits.  This
-  basically calculates the *nth* next or previous prefix given the offset.
+  This basically increases or decreases the number represented by the *prefix*
+  bits.
 
   Note that the length of *prefix.bits* will not change.
 
   ## Examples
 
-      iex> new(<<10, 11>>, 32) |> offset(1)
+      iex> new(<<10, 11>>, 32) |> sibling(1)
       %Prefix{bits: <<10, 12>>, maxlen: 32}
 
-      iex> new(<<10, 11, 0>>, 32) |> offset(1)
+      iex> new(<<10, 11, 0>>, 32) |> sibling(1)
       %Prefix{bits: <<10, 11, 1>>, maxlen: 32}
 
-      iex> new(<<10, 11, 0>>, 32) |> offset(255)
+      iex> new(<<10, 11, 0>>, 32) |> sibling(255)
       %Prefix{bits: <<10, 11, 255>>, maxlen: 32}
 
-      iex> new(<<10, 11, 0>>, 32) |> offset(256)
+      iex> new(<<10, 11, 0>>, 32) |> sibling(256)
       %Prefix{bits: <<10, 12, 0>>, maxlen: 32}
 
       # wraps around address boundaries
-      iex> new(<<0, 0, 0, 0>>, 32) |> offset(-1)
+      iex> new(<<0, 0, 0, 0>>, 32) |> sibling(-1)
       %Prefix{bits: <<255, 255, 255, 255>>, maxlen: 32}
 
       # zero bit-length stays zero bit-length
-      iex> new(<<>>, 32) |> offset(1)
+      iex> new(<<>>, 32) |> sibling(1)
       %Prefix{bits: <<>>, maxlen: 32}
 
   """
-  @spec offset(t, integer) :: t | PrefixError.t()
-  def offset(prefix, offset) when valid?(prefix) do
+  @spec sibling(t, integer) :: t | PrefixError.t()
+  def sibling(prefix, offset) when valid?(prefix) do
     bsize = bit_size(prefix.bits)
     x = cast_int(prefix.bits, bit_size(prefix.bits))
     x = x + offset
@@ -745,8 +745,8 @@ defmodule Prefix do
     %Prefix{prefix | bits: <<x::size(bsize)>>}
   end
 
-  def offset(x, _) when is_exception(x), do: x
-  def offset(x, o), do: error(:offset, {x, o})
+  def sibling(x, _) when is_exception(x), do: x
+  def sibling(x, o), do: error(:sibling, {x, o})
 
   @doc """
   The 'size' of a prefix as determined by its *missing* bits.

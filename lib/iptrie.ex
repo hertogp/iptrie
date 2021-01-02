@@ -214,7 +214,7 @@ defmodule Iptrie do
     x = encode(prefix)
     n = 1 - 2 * bit(x, bit_size(x.bits) - 1)
 
-    offset(x, n)
+    sibling(x, n)
     |> decode()
   end
 
@@ -241,7 +241,7 @@ defmodule Iptrie do
   def jump(prefix, n) do
     prefix
     |> encode()
-    |> offset(n)
+    |> sibling(n)
     |> decode()
   end
 
