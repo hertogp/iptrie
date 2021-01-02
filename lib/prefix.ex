@@ -293,17 +293,15 @@ defmodule Prefix do
       iex> new(<<255, 255, 0, 0>>, 32) |> bnot()
       %Prefix{bits: <<0, 0, 255, 255>>, maxlen: 32}
 
+      iex> new(<<255, 0>>, 32) |> bnot()
+      %Prefix{bits: <<0, 255>>, maxlen: 32}
+
   """
   def bnot(prefix) when valid?(prefix) do
-    inv =
-      for <<b::size(1) <- prefix.bits>> do
-        case b do
-          0 -> <<1::1>>
-          1 -> <<0::1>>
-        end
-      end
-
-    %Prefix{prefix | bits: Enum.reduce(inv, fn x, acc -> <<acc::bitstring, x::bitstring>> end)}
+    width = bit_size(prefix.bits)
+    x = cast_int(prefix.bits, width)
+    x = ~~~x
+    %Prefix{prefix | bits: <<x::size(width)>>}
   end
 
   @doc """
@@ -360,37 +358,63 @@ defmodule Prefix do
   end
 
   @doc """
+  Return a bitwise XOR of the prefixes.
+
+  ## Example
+
+      iex> x = new(<<10, 11, 12, 13>>, 32)
+      iex> y = new(<<255, 255, 0, 0>>, 32)
+      iex> bxor(x, y)
+      %Prefix{bits: <<245, 244, 12, 13>>, maxlen: 32}
+
+      iex> x = new(<<10, 11, 12, 13>>, 32)
+      iex> y = new(<<255, 255>>, 32)
+      iex> bxor(x, y)
+      %Prefix{bits: <<245, 244, 12, 13>>, maxlen: 32}
+      iex>
+      iex> bxor(y, x)
+      %Prefix{bits: <<245, 244, 12, 13>>, maxlen: 32}
+
+
+  """
+  def bxor(prefix1, prefix2) when valid?(prefix1, prefix2) do
+    width = max(bit_size(prefix1.bits), bit_size(prefix2.bits))
+    x = cast_int(prefix1.bits, width)
+    y = cast_int(prefix2.bits, width)
+    z = x ^^^ y
+    %Prefix{prefix1 | bits: <<z::size(width)>>}
+  end
+
+  @doc """
   Rotate the prefix bits n-positions
 
   ## Example
 
-      iex> new(<<1, 2, 3, 4>>, 32) |> rotate(8)
+      iex> new(<<1, 2, 3, 4>>, 32) |> brot(8)
       %Prefix{bits: <<4, 1, 2, 3>>, maxlen: 32}
 
-      iex> new(<<1, 2, 3, 4>>, 32) |> rotate(-8)
+      iex> new(<<1, 2, 3, 4>>, 32) |> brot(-8)
       %Prefix{bits: <<2, 3, 4, 1>>, maxlen: 32}
 
-      iex> new(<<1, 2, 3, 4>>, 32) |> rotate(-1)
+      iex> new(<<1, 2, 3, 4>>, 32) |> brot(-1)
       %Prefix{bits: <<2, 4, 6, 8>>, maxlen: 32}
 
   """
-  def rotate(prefix, shift) when shift < 0 do
+  def brot(prefix, shift) when shift < 0 do
     plen = bit_size(prefix.bits)
-    rotate(prefix, plen + rem(shift, plen))
+    brot(prefix, plen + rem(shift, plen))
   end
 
-  def rotate(prefix, 0) when valid?(prefix), do: prefix
-
-  def rotate(prefix, shift) when valid?(prefix) do
-    break = bit_size(prefix.bits) - rem(shift, bit_size(prefix.bits))
-
-    <<left::bitstring-size(break), right::bitstring>> = prefix.bits
-
-    %{prefix | bits: <<right::bitstring, left::bitstring-size(break)>>}
+  def brot(prefix, shift) do
+    width = bit_size(prefix.bits)
+    shift = rem(shift, width)
+    x = cast_int(prefix.bits, width)
+    m = ~~~(1 <<< shift)
+    r = x &&& m
+    l = x >>> shift
+    lw = width - shift
+    %Prefix{prefix | bits: <<r::size(shift), l::size(lw)>>}
   end
-
-  def rotate(x, _) when is_exception(x), do: x
-  def rotate(x, y), do: error(:rotate, {x, y})
 
   @doc """
   Prepend bits to a prefix to achieve a desired  length.
