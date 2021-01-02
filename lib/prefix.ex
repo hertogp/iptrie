@@ -487,6 +487,10 @@ defmodule Prefix do
   def padleft(x, _, _, _) when is_exception(x), do: x
   def padleft(x, s, f, k), do: error(:padleft, {x, s, f, k})
 
+  # def padl(prefix, bit, nbits) do
+  #   bit = if bit == 0, do: 0, else: -1
+
+  # end
   @doc """
   Append bits to a prefix to achieve a desired length.
 
@@ -521,6 +525,43 @@ defmodule Prefix do
 
   def padright(x, _, _) when is_exception(x), do: x
   def padright(x, s, f), do: error(:padright, {x, s, f})
+
+  @doc """
+  Right pad the prefix with nbits of `0` or `1`s.
+
+  Defaults to full padding using zero's.
+
+  ## Examples
+
+      iex> new(<<1, 2>>, 32) |> padr()
+      %Prefix{bits: <<1, 2, 0, 0>>, maxlen: 32}
+
+      iex> new(<<1, 2>>, 32) |> padr(1)
+      %Prefix{bits: <<1, 2, 255, 255>>, maxlen: 32}
+
+      iex> new(<<255, 255>>, 32) |> padr(0, 8)
+      %Prefix{bits: <<255, 255, 0>>, maxlen: 32}
+
+      iex> new(<<255, 255>>, 32) |> padr(1, 16)
+      %Prefix{bits: <<255, 255, 255, 255>>, maxlen: 32}
+
+      # results are clipped to maxlen
+      iex> new(<<1, 2>>, 32) |> padr(0, 64)
+      %Prefix{bits: <<1, 2, 0, 0>>, maxlen: 32}
+
+  """
+  def padr(x), do: padr(x, 0, x.maxlen)
+  def padr(x, bit), do: padr(x, bit, x.maxlen)
+
+  def padr(prefix, bit, nbits) do
+    bsize = bit_size(prefix.bits)
+    nbits = min(nbits, prefix.maxlen - bsize)
+    width = bsize + nbits
+    y = if bit == 0, do: 0, else: (1 <<< nbits) - 1
+    x = cast_int(prefix.bits, width) + y
+
+    %Prefix{prefix | bits: <<x::size(width)>>}
+  end
 
   def replace(prefix, bit, offset \\ 0)
   def replace(x, bit, offset) when valid?(x), do: replacep(x, bit, offset)
