@@ -4,8 +4,8 @@ defmodule Iptrie.Dot do
 
   """
 
-  alias Prefix.IP
   alias Radix
+  alias Iptrie
 
   @color %{
     root: "orange",
@@ -17,7 +17,7 @@ defmodule Iptrie.Dot do
 
   defp decode(key) do
     key
-    |> IP.format()
+    |> Iptrie.key_tostring()
   end
 
   # TODO:
@@ -63,7 +63,7 @@ defmodule Iptrie.Dot do
 
     body =
       leaf
-      |> Enum.map(fn x -> decode(elem(x, 0)) end)
+      |> Enum.map(fn {key, _v} -> decode(key) end)
       |> Enum.map(fn x -> "  <TR><TD>#{x}</TD></TR>" end)
       |> Enum.join("\n  ")
 
@@ -82,20 +82,17 @@ defmodule Iptrie.Dot do
   # TODO:
   #  add opts to color specific key(s) differently
   #  - perhaps an Iptrie with properties for drawing and using lpm match
-  def dotify(bst, _title) do
+  def dotify(tree, title) do
     [_ids, nodes, verts] =
-      Radix.traverse([[], [], []], fn n, x -> dump(n, x) end, bst, :postorder)
+      Radix.traverse([[], [], []], fn n, x -> dump(n, x) end, tree, :postorder)
 
     body = Enum.join(nodes) <> "\n" <> Enum.join(verts)
-
-    # To add a title, include:
-    # label="#{title}";
-    # in the docstring below
 
     """
     digraph G {
 
       labelloc="t";
+      label="#{title}";
       rankdir="TB";
       ranksep="0.5 equally";
 
@@ -105,7 +102,7 @@ defmodule Iptrie.Dot do
     """
   end
 
-  def write(bst, fname) do
-    File.write(fname, dotify(bst, fname))
+  def write(bst, fname, title \\ "Iptrie") do
+    File.write(fname, dotify(bst.root, title))
   end
 end

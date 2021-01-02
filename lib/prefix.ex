@@ -449,43 +449,6 @@ defmodule Prefix do
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
 
-  @doc """
-  Prepend bits to a prefix to achieve a desired  length.
-
-  By default, `0`-bits are used, unless *fill* is `1` in which case `1`-bits
-  are used.
-
-  Note: when "prepending" to a shorter length, bits are actually removed.
-
-  ## Examples
-
-      iex> new(<<10, 11>>, 32) |> padleft(17)
-      %Prefix{bits: <<0::1, 10, 11>>, maxlen: 32}
-
-      iex> new(<<0>>, 32) |> padleft(32, 1)
-      %Prefix{bits: <<255, 255, 255, 0>>, maxlen: 32}
-
-  """
-  @spec padleft(t, pos_integer, 0..1) :: t
-  def padleft(prefix, size, fill \\ 0, skip \\ 0)
-
-  def padleft(prefix, size, fill, skip) when size?(prefix, size) do
-    pad = size - bit_size(prefix.bits) - skip
-    fill = if fill == 0, do: 0, else: -1
-    <<keep::bitstring-size(skip), bits::bitstring>> = prefix.bits
-
-    case pad > 0 do
-      true -> %{prefix | bits: <<keep::bitstring-size(skip), fill::size(pad), bits::bitstring>>}
-      false -> %{prefix | bits: <<keep::bitstring-size(skip), bits::bitstring-size(size)>>}
-    end
-  end
-
-  def padleft(x, _, _, _) when is_exception(x), do: x
-  def padleft(x, s, f, k), do: error(:padleft, {x, s, f, k})
-
-  # def padl(prefix, bit, nbits) do
-  #   bit = if bit == 0, do: 0, else: -1
-
   # end
   @doc """
   Append bits to a prefix to achieve a desired length.
@@ -618,7 +581,7 @@ defmodule Prefix do
   ## Examples
 
       # break out the /26's in a /24
-      iex> new(<<10, 11, 12>>, 32)|> subdivide(26)
+      iex> new(<<10, 11, 12>>, 32)|> partition(26)
       [
         %Prefix{bits: <<10, 11, 12, 0::size(2)>>, maxlen: 32},
         %Prefix{bits: <<10, 11, 12, 1::size(2)>>, maxlen: 32},
@@ -627,24 +590,18 @@ defmodule Prefix do
       ]
 
   """
-  @spec subdivide(t, non_neg_integer) :: list(t)
-  def subdivide(prefix, newlen) when size?(prefix, newlen),
-    do: subdividep([prefix], _curlen = bit_size(prefix.bits), newlen)
+  @spec partition(t, non_neg_integer) :: list(t)
+  def partition(prefix, newlen) when size?(prefix, newlen) and newlen >= bit_size(prefix.bits) do
+    width = newlen - bit_size(prefix.bits)
+    max = (1 <<< width) - 1
 
-  def subdivide(x, _) when is_exception(x), do: x
-  def subdivide(x, l), do: error(:subdivide, {x, l})
-
-  defp subdividep([pfx], curlen, newlen) when newlen < curlen,
-    do: error(:subdivide, {pfx, curlen, newlen})
-
-  defp subdividep(acc, curlen, newlen) when curlen == newlen,
-    do: Enum.sort(acc, Prefix)
-
-  defp subdividep(acc, curlen, newlen) do
-    acc0 = acc |> Enum.map(fn p -> padright(p, bit_size(p.bits) + 1) end)
-    acc1 = acc |> Enum.map(fn p -> padright(p, bit_size(p.bits) + 1, 1) end)
-    subdividep(acc0 ++ acc1, curlen + 1, newlen)
+    for n <- 0..max do
+      %Prefix{prefix | bits: <<prefix.bits::bitstring, n::size(width)>>}
+    end
   end
+
+  def partition(x, _) when is_exception(x), do: x
+  def partition(x, n), do: error(:subdivide, {x, n})
 
   # Numbers
 

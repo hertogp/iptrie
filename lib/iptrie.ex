@@ -5,7 +5,12 @@ defmodule Iptrie do
 
   ## Examples
 
-  # iex> Iptrie.Dot.write(ipt, "doc/img/example.dot")
+      iex> elms = [{"1.1.1.0/24", 24}, {"3.0.0.0/8", 8},
+      ...>  {"1.1.1.0/25", "lower"}, {"1.1.1.128/25", "upper"},
+      ...>  {"acdc:1975::", "T.N.T"}, {"acdc:1976::", "High Voltage"},
+      ...>  {"abba:1975::", "abba"}, {"abba:1976::", "Arrival"}]
+      iex> ipt = new(elms)
+      iex> Iptrie.Dot.write(ipt, "doc/img/example.dot", "example")
 
   # ![example](img/example.dot.png)
 
@@ -14,10 +19,38 @@ defmodule Iptrie do
   import Prefix.IP
   alias PrefixError
   alias Radix
+  alias Iptrie.Dot
 
   defstruct root: nil
 
   @type t :: %__MODULE__{}
+
+  # IP v4/v6 markers
+  @ip4 <<0::1>>
+  @ip6 <<1::1>>
+
+  # Key/Unkey
+  # - key returns a prefix's bits with an IPv4/IPv6 marker preprended
+  # - unkey does the opposite and returns the original prefix
+  # used so both types can be stuffed down the same Radix tree
+  defp key(%Prefix{bits: bits, maxlen: 32}),
+    do: <<@ip4, bits::bitstring>>
+
+  defp key(%Prefix{bits: bits, maxlen: 128}),
+    do: <<@ip6, bits::bitstring>>
+
+  defp unkey(<<@ip4, bits::bitstring>>),
+    do: %Prefix{bits: bits, maxlen: 32}
+
+  defp unkey(<<@ip6, bits::bitstring>>),
+    do: %Prefix{bits: bits, maxlen: 128}
+
+  # given to Dot to dump a Iptrie to graphviz file
+  def key_tostring(key) do
+    key
+    |> unkey()
+    |> decode()
+  end
 
   # Table
 
@@ -46,7 +79,7 @@ defmodule Iptrie do
   def set(tree, pfx, val) do
     case encode(pfx) do
       x when is_exception(x) -> raise x
-      x -> %{tree | root: Radix.set(tree.root, x.bits, val)}
+      x -> %{tree | root: Radix.set(tree.root, key(x), val)}
     end
   end
 
@@ -66,9 +99,12 @@ defmodule Iptrie do
     do: lookup(tree, encode(x))
 
   def lookup(%__MODULE__{} = tree, %Prefix{} = x),
-    do: Radix.lpm(tree.root, x.bits)
+    do: Radix.lpm(tree.root, key(x))
 
   def lookup(_, _), do: nil
+
+  def dot(tree, fname),
+    do: Dot.write(tree, fname)
 
   # IP prefixes
 
