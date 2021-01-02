@@ -551,26 +551,6 @@ defmodule Prefix do
     %Prefix{prefix | bits: <<y::size(nbits), x::size(bsize)>>}
   end
 
-  def replace(prefix, bit, offset \\ 0)
-  def replace(x, bit, offset) when valid?(x), do: replacep(x, bit, offset)
-  def replace(x, _, _) when is_exception(x), do: x
-  def replace(x, y, z), do: error(:replace, {x, y, z})
-
-  def replacep(x, bit, offset) when offset < 0 and offset > -bit_size(x.bits),
-    do: replace(x, bit, bit_size(x.bits) + offset)
-
-  def replacep(x, 1, offset) when -1 < offset and offset < bit_size(x.bits) do
-    len = bit_size(x.bits) - offset
-    <<keep::size(offset), _::bitstring>> = x.bits
-    %{x | bits: <<keep::size(offset), -1::size(len)>>}
-  end
-
-  def replacep(x, 0, offset) when -1 < offset and offset < bit_size(x.bits) do
-    len = bit_size(x.bits) - offset
-    <<keep::size(offset), _::bitstring>> = x.bits
-    %{x | bits: <<keep::size(offset), 0::size(len)>>}
-  end
-
   @doc """
   Subdivide a *prefix* into a list of smaller pieces, each *newlen* bits long.
 
