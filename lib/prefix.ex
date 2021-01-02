@@ -263,7 +263,7 @@ defmodule Prefix do
   def new(x, _) when is_exception(x), do: x
   def new(x, m), do: error(:new, {x, m})
 
-  # Bits padding, truncating, etc
+  # Bit Ops
 
   def bit(prefix, pos) when pos > bit_size(prefix.bits), do: 0
 
@@ -274,6 +274,57 @@ defmodule Prefix do
 
   def bit(x, _) when is_exception(x), do: x
   def bit(x, p), do: error(:bit, {x, p})
+
+  @doc """
+  Return a bitwise NOT of the prefix.
+
+  ## Example
+
+      iex> new(<<255, 255, 0, 0>>, 32) |> bnot()
+      %Prefix{bits: <<0, 0, 255, 255>>, maxlen: 32}
+
+  """
+  def bnot(prefix) when valid?(prefix) do
+    inv =
+      for <<b::size(1) <- prefix.bits>> do
+        case b do
+          0 -> <<1::1>>
+          1 -> <<0::1>>
+        end
+      end
+
+    %Prefix{prefix | bits: Enum.reduce(inv, fn x, acc -> <<acc::bitstring, x::bitstring>> end)}
+  end
+
+  @doc """
+  Return a bitwise AND of the prefix.
+
+  ## Example
+
+      iex> x = new(<<10, 11, 255, 128>>, 32)
+      iex> y = new(<<255, 255, 255, 0>>, 32)
+      iex> band(x, y)
+      %Prefix{bits: <<10, 11, 255, 0>>, maxlen: 32}
+
+  """
+  def band(prefix1, prefix2) when valid?(prefix1) and valid?(prefix2) do
+    x =
+      for <<b::size(1) <- prefix1.bits>> do
+        b
+      end
+
+    y =
+      for <<b::size(1) <- prefix2.bits>> do
+        b
+      end
+
+    z =
+      Enum.zip(x, y)
+      |> Enum.map(fn {x, y} -> x * y end)
+      |> Enum.reduce(<<>>, fn x, acc -> <<acc::bitstring, x::size(1)>> end)
+
+    %Prefix{prefix1 | bits: z}
+  end
 
   @doc """
   Rotate the prefix bits n-positions
@@ -295,7 +346,7 @@ defmodule Prefix do
     rotate(prefix, plen + rem(shift, plen))
   end
 
-  def rotate(prefix, 0), do: prefix
+  def rotate(prefix, 0) when valid?(prefix), do: prefix
 
   def rotate(prefix, shift) when valid?(prefix) do
     break = bit_size(prefix.bits) - rem(shift, bit_size(prefix.bits))
@@ -304,6 +355,9 @@ defmodule Prefix do
 
     %{prefix | bits: <<right::bitstring, left::bitstring-size(break)>>}
   end
+
+  def rotate(x, _) when is_exception(x), do: x
+  def rotate(x, y), do: error(:rotate, {x, y})
 
   @doc """
   Prepend bits to a prefix to achieve a desired  length.
@@ -328,11 +382,11 @@ defmodule Prefix do
   def padleft(prefix, size, fill, skip) when size?(prefix, size) do
     pad = size - bit_size(prefix.bits) - skip
     fill = if fill == 0, do: 0, else: -1
-    <<keep::size(skip), bits::bitstring>> = prefix.bits
+    <<keep::bitstring-size(skip), bits::bitstring>> = prefix.bits
 
     case pad > 0 do
-      true -> %{prefix | bits: <<keep::size(skip), fill::size(pad), bits::bitstring>>}
-      false -> %{prefix | bits: <<keep::size(skip), bits::bitstring-size(size)>>}
+      true -> %{prefix | bits: <<keep::bitstring-size(skip), fill::size(pad), bits::bitstring>>}
+      false -> %{prefix | bits: <<keep::bitstring-size(skip), bits::bitstring-size(size)>>}
     end
   end
 
