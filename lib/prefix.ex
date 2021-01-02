@@ -435,6 +435,25 @@ defmodule Prefix do
   end
 
   @doc """
+  Arithmetic shift right for prefix.
+
+  ## Example
+
+      iex> new(<<1, 2>>, 32) |> bsr(2)
+      %Prefix{bits: <<0, 64>>, maxlen: 32}
+
+      iex> new(<<1, 2>>, 32) |> bsr(-2)
+      %Prefix{bits: <<4, 8>>, maxlen: 32}
+
+  """
+  def bsr(prefix, shift) do
+    width = bit_size(prefix.bits)
+    x = cast_int(prefix.bits, width)
+    x = x >>> shift
+    %Prefix{prefix | bits: <<x::size(width)>>}
+  end
+
+  @doc """
   Prepend bits to a prefix to achieve a desired  length.
 
   By default, `0`-bits are used, unless *fill* is `1` in which case `1`-bits
