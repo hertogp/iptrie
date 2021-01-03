@@ -75,8 +75,6 @@ defmodule Prefix.IP do
       %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
 
       # host bits are lost in translation
-      iex> encode({{1,1,1,1}, 24})
-      %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
       iex> encode("1.1.1.1/24")
       %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
 
@@ -85,6 +83,10 @@ defmodule Prefix.IP do
 
       iex> encode("acdc:1976::")
       %Prefix{bits: <<0xacdc::16, 0x1976::16, 0::16, 0::16, 0::16, 0::16, 0::16, 0::16>>, maxlen: 128}
+
+      # an exception as argument is passed through
+      iex> decode("illegal") |> encode()
+      %PrefixError{id: :decode, detail: "illegal"}
 
   """
 
@@ -141,9 +143,11 @@ defmodule Prefix.IP do
   @doc """
   Decode a *prefix* back into string, using CIDR-notation.
 
-  Notes:
-  - the `/len` is not added when `len` is at its maximum.
-  - when converting from `digits` format, the mask is *not* applied first.
+  Where *prefix* is either a string using CIDR notation, a `t::inet.ip_address/0`
+  or a `t:digits/0`
+
+  For full addresses the '/length' is omitted.  When decoding a `t:digits/0`,
+  the mask is *not* applied first.
 
   ## Examples
 
@@ -153,27 +157,27 @@ defmodule Prefix.IP do
       iex> decode(%Prefix{bits: <<1, 1, 1>>, maxlen: 32})
       "1.1.1.0/24"
 
-      # Note: mask is *not* applied when using `{digits, len}`-format
+      # host bits are preserved
       iex> decode({{1, 1, 1, 1}, 24})
       "1.1.1.1/24"
 
       # an exception as argument is passed through
-      iex> decode(%PrefixError{id: :func_x, detail: "some error"})
-      %PrefixError{id: :func_x, detail: "some error"}
+      iex> encode("illegal") |> decode()
+      %PrefixError{id: :encode, detail: "illegal"}
 
   """
   @impl Prefix
   @spec decode(Prefix.t() | :inet.ip_address() | digits()) :: String.t() | PrefixError.t()
-  def decode(%Prefix{bits: <<bits::bitstring>>, maxlen: 32}),
-    do: Prefix.format(%Prefix{bits: bits, maxlen: 32})
+  def decode(%Prefix{maxlen: 32} = prefix) do
+    prefix
+    |> Prefix.digits(8)
+    |> decode()
+  end
 
-  def decode(%Prefix{bits: <<bits::bitstring>>, maxlen: 128}) do
-    {digits, len} =
-      %Prefix{bits: bits, maxlen: 128}
-      |> Prefix.digits(16)
-
-    pfx = :inet.ntoa(digits)
-    if len < 128, do: "#{pfx}/#{len}", else: pfx
+  def decode(%Prefix{maxlen: 128} = prefix) do
+    prefix
+    |> Prefix.digits(16)
+    |> decode()
   end
 
   def decode(digits) when ip4?(digits),
@@ -184,12 +188,12 @@ defmodule Prefix.IP do
 
   def decode({digits, len}) when dig4?(digits, len) do
     pfx = :inet.ntoa(digits)
-    if len < 32, do: "#{pfx}/#{len}", else: pfx
+    if len < 32, do: "#{pfx}/#{len}", else: "#{pfx}"
   end
 
   def decode({digits, len}) when dig6?(digits, len) do
     pfx = :inet.ntoa(digits)
-    if len < 128, do: "#{pfx}/#{len}", else: pfx
+    if len < 128, do: "#{pfx}/#{len}", else: "#{pfx}"
   end
 
   def decode(x) when is_exception(x), do: x
