@@ -126,23 +126,53 @@ defmodule Prefix do
 
   # Behaviour
 
-  @doc """
-  Encode one or more domain specific constructs into a `t:Prefix.t/0`,
-  any errors should result in a `t:PrefixError.t/0`-struct.
-
-  """
   @callback encode(term) :: t | PrefixError.t()
 
-  def encode(arg, module), do: module.encode(arg)
-
   @doc """
-  Decode a `t:Prefix.t/0` back into a domain specific construct, any errors
-  should result in a `t:PrefixError.t/0`-struct.
+  Encode a domain specific constructs into a `t:Prefix.t/0`, raises
+  `t:PrefixError.t/0`-struct on errors.
+
+  ## Example
+
+      iex> alias Prefix.IP
+      iex> encode!("1.1.1.1", IP)
+      %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
+
+      iex> alias Prefix.IP
+      iex> encode!("1.1.1.256", IP)
+      ** (PrefixError) encode: "1.1.1.256"
 
   """
+  def encode!(arg, module) do
+    case module.encode(arg) do
+      %PrefixError{} = x -> raise x
+      x -> x
+    end
+  end
+
   @callback decode(t) :: term | PrefixError.t()
 
-  def decode(arg, module), do: module.decode(arg)
+  @doc """
+  Decode a `t:Prefix.t/0` back into a domain specific construct, raises
+  `t:PrefixError.t/0`-struct on errors.
+
+  ## Examples
+
+      iex> alias Prefix.IP
+      iex> decode!(new(<<1, 1, 1, 1>>, 32), IP)
+      "1.1.1.1"
+
+      iex> alias Prefix.IP
+      iex> decode!({{1, 1, 1, 256}, 24}, IP)
+      ** (PrefixError) decode: args ({1, 1, 1, 256}, 24)
+
+  """
+  def decode!(arg, module) do
+    case module.decode(arg) do
+      %PrefixError{} = x -> raise x
+      x -> x
+    end
+  end
 
   # Guards
 
