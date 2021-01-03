@@ -253,7 +253,7 @@ defmodule Prefix do
       %Prefix{maxlen: 128, bits: <<10, 10>>}
 
   """
-  @spec new(t | bitstring, non_neg_integer) :: t
+  @spec new(t | bitstring, pos_integer) :: t
   def new(bits, maxlen) when types?(bits, maxlen),
     do: %__MODULE__{bits: truncate(bits, maxlen), maxlen: maxlen}
 
@@ -265,7 +265,12 @@ defmodule Prefix do
 
   # Bit Ops
 
-  def bit(prefix, pos) when pos > bit_size(prefix.bits), do: 0
+  @doc """
+  Return a *prefix*'s bit-alue at given *position* 
+
+  """
+  @spec bit(t, pos_integer) :: 0..1 | PrefixError.t()
+  def bit(prefix, position) when position > bit_size(prefix.bits), do: 0
 
   def bit(prefix, pos) when pos > 0 do
     <<_::size(pos), bit::1, _::bitstring>> = prefix.bits
@@ -558,7 +563,7 @@ defmodule Prefix do
       ]
 
   """
-  @spec slice(t, non_neg_integer) :: list(t)
+  @spec slice(t, pos_integer) :: list(t)
   def slice(prefix, newlen) when size?(prefix, newlen) and newlen >= bit_size(prefix.bits) do
     width = newlen - bit_size(prefix.bits)
     max = (1 <<< width) - 1
@@ -596,7 +601,7 @@ defmodule Prefix do
       "000010100000101100001100"
 
   """
-  @spec fields(t, non_neg_integer) :: list({non_neg_integer, non_neg_integer})
+  @spec fields(t, pos_integer) :: list({pos_integer, pos_integer})
   def fields(prefix, width) when valid?(prefix),
     do: fields([], prefix.bits, width)
 
@@ -763,7 +768,7 @@ defmodule Prefix do
       iex> new(<<10, 10, 10, 10>>, 32) |> size()
       1
   """
-  @spec size(t) :: non_neg_integer
+  @spec size(t) :: pos_integer
   def size(prefix) when valid?(prefix),
     do: :math.pow(2, prefix.maxlen - bit_size(prefix.bits)) |> trunc
 
