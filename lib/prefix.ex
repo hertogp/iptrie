@@ -64,29 +64,14 @@ defmodule Prefix do
       %Prefix{bits: <<192, 63, 213>>, maxlen: 48}         # MAC OUI
 
 
-  The module contains generic functions to validate, create, modify, sort,
-  enumerate, format or index into prefixes, usually without any form of
-  interpretation.  Submodules that parse domain specific constructs into a
-  prefix can use these to provide additional functions that reflect their
-  domain's meaning of prefixes.
+  The module contains generic functions to work with prefixes, while parsing
+  is delegated to domain specific submodules that implement Prefix' behaviour.
 
-  In general, Prefix functions either return some value or a PrefixError in
-  case of any errors.  These exceptions are also passed through if given where
-  a prefix was expected.
+  In general, Prefix functions either return some value or a t:PrefixError.t/0`
+  in case of any errors.  These exceptions are also passed through if given
+  where a prefix was expected.
 
-  Additionally, a `Prefix.digits/2` decodes a prefix to a `{digits, len}`
-  format.  The *missing* bits are filled in as `0`'s before turning the bits
-  into numbers using a specified *width* and the length is the actual length of
-  the original bitstring.
-
-      # prefix as numbers
-      iex> new(<<10,10,10>>, 32) |> digits(8)
-      {{10, 10, 10, 0}, 24}
-
-      iex> new(<<0xacdc::16, 0x1976::16>>, 128) |> digits(16)
-      {{44252, 6518, 0, 0, 0, 0, 0, 0}, 32}
-
-  A prefix is also enumerable:
+  A *prefix* is also enumerable:
 
       iex> pfx = new(<<10,10,10,0::6>>, 32)
       iex> for ip <- pfx do ip end
@@ -97,23 +82,12 @@ defmodule Prefix do
         %Prefix{bits: <<10, 10, 10, 3>>, maxlen: 32}
       ]
 
-  Note that enumeration yields a list of full-length prefixes as the missing
-  bits are filled in during the enumeration.  This could be used for something
-  like:
+  Enumeration yields a list of full-length prefixes.
 
-      iex> for ip <- new(<<10,10,10,0::6>>, 32) do
-      ...>   elem(digits(ip, 8), 0)
-      ...> end
-      [ {10, 10, 10, 0},
-        {10, 10, 10, 1},
-        {10, 10, 10, 2},
-        {10, 10, 10, 3}
-      ]
-
-  Prefix also implements the `String.Chars` protocol, using the format function
-  to provide some sane defaults for prefix's of *maxlen* 32, 48 and 128
-  respectively.  Other sizes fallback to a generic dotted notation of 8-bit
-  numbers.
+  A *prefix* also implements the `String.Chars` protocol with some defaults for
+  prefixes that formats maxlen 32 as IPv4, a maxlen of 48  as MAC address and
+  a maxlen of 128 as IPv6.  Other maxlen's will simply come out as a series of
+  8-bit numbers joined by ".".
 
       iex> "#{new(<<10, 11, 12>>, 32)}"
       "10.11.12.0/24"
@@ -169,11 +143,8 @@ defmodule Prefix do
   def decode(arg, module), do: module.decode(arg)
   # Guards
 
-  @doc """
-  Guard that ensures *bits* is a bitstring and *maxlen* a non-neg-integer.
-
-  """
-  defguard types?(bits, maxlen) when is_bitstring(bits) and is_integer(maxlen) and maxlen >= 0
+  # Guard that ensures *bits* is a bitstring and *maxlen* a non-neg-integer.
+  defguardp types?(bits, maxlen) when is_bitstring(bits) and is_integer(maxlen) and maxlen >= 0
 
   @doc """
   Guard that ensures a given *prefix* is actually valid.
@@ -191,15 +162,18 @@ defmodule Prefix do
   - must both have the same *maxlen*
 
   """
-  defguard valid?(px, py)
-           when valid?(px) and valid?(py) and px.maxlen == py.maxlen
+  defguard valid?(x, y)
+           when valid?(x) and valid?(y) and x.maxlen == y.maxlen
 
   @doc """
   Guard that ensures *pfx* has *width*-bits to spare.
 
   """
   defguard width?(prefix, width)
-           when valid?(prefix) and width in 0..(prefix.maxlen - bit_size(prefix.bits))
+           when valid?(prefix) and
+                  is_integer(width) and
+                  width > -1 and
+                  width <= prefix.maxlen - bit_size(prefix.bits)
 
   @doc """
   Guard that ensures a proposed new *size* is valid for given *prefix*.
