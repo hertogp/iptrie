@@ -143,10 +143,10 @@ defmodule Prefix do
       ** (PrefixError) encode: "1.1.1.256"
 
   """
-  def encode!(arg, module) do
-    case module.encode(arg) do
+  def encode!(construct, domain) do
+    case domain.encode(construct) do
       %PrefixError{} = x -> raise x
-      x -> x
+      prefix -> prefix
     end
   end
 
@@ -167,10 +167,10 @@ defmodule Prefix do
       ** (PrefixError) decode: args ({1, 1, 1, 256}, 24)
 
   """
-  def decode!(arg, module) do
-    case module.decode(arg) do
+  def decode!(prefix, domain) do
+    case domain.decode(prefix) do
       %PrefixError{} = x -> raise x
-      x -> x
+      construct -> construct
     end
   end
 
