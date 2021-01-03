@@ -31,34 +31,32 @@ defmodule Prefix.IP do
 
   # GUARDS
 
-  # guards for {digits, len}
-  @doc """
-  Ensure len is a valid ip4 length.
-  """
-  defguard len4?(l) when is_integer(l) and l > -1 and l < 33
-  defguard len6?(l) when is_integer(l) and l > -1 and l < 129
+  defguardp len4?(len) when is_integer(len) and len > -1 and len < 33
+  defguardp len6?(len) when is_integer(len) and len > -1 and len < 129
+  defguardp dig4?(n) when is_integer(n) and n > -1 and n < 256
+  defguardp dig6?(n) when is_integer(n) and n > -1 and n < 65536
 
-  defguard ip4?(t)
-           when tuple_size(t) == 4 and
-                  elem(t, 0) in 0..255 and
-                  elem(t, 1) in 0..255 and
-                  elem(t, 2) in 0..255 and
-                  elem(t, 3) in 0..255
+  defguardp ip4?(t)
+            when tuple_size(t) == 4 and
+                   dig4?(elem(t, 0)) and
+                   dig4?(elem(t, 1)) and
+                   dig4?(elem(t, 2)) and
+                   dig4?(elem(t, 3))
 
-  defguard ip6?(t)
-           when tuple_size(t) == 8 and
-                  elem(t, 0) in 0..65535 and
-                  elem(t, 1) in 0..65535 and
-                  elem(t, 2) in 0..65535 and
-                  elem(t, 3) in 0..65535 and
-                  elem(t, 4) in 0..65535 and
-                  elem(t, 5) in 0..65535 and
-                  elem(t, 6) in 0..65535 and
-                  elem(t, 7) in 0..65535
+  defguardp ip6?(t)
+            when tuple_size(t) == 8 and
+                   dig6?(elem(t, 0)) and
+                   dig6?(elem(t, 1)) and
+                   dig6?(elem(t, 2)) and
+                   dig6?(elem(t, 3)) and
+                   dig6?(elem(t, 4)) and
+                   dig6?(elem(t, 5)) and
+                   dig6?(elem(t, 6)) and
+                   dig6?(elem(t, 7))
 
-  defguard dig4?(digits, len) when ip4?(digits) and len4?(len)
-  defguard dig6?(digits, len) when ip6?(digits) and len6?(len)
-  defguard dig?(digits, len) when dig4?(digits, len) or dig6?(digits, len)
+  defguardp digits4?(digits, len) when ip4?(digits) and len4?(len)
+  defguardp digits6?(digits, len) when ip6?(digits) and len6?(len)
+  defguardp digits?(digits, len) when digits4?(digits, len) or digits6?(digits, len)
 
   @compile inline: [error: 2]
   defp error(id, detail), do: PrefixError.new(id, detail)
@@ -124,7 +122,7 @@ defmodule Prefix.IP do
       {:error, _} -> error(:encode, prefix)
       {_, :error} -> error(:encode, prefix)
       {digits, :none} -> encode(digits)
-      {digits, {len, ""}} when dig?(digits, len) -> encode({digits, len})
+      {digits, {len, ""}} when digits?(digits, len) -> encode({digits, len})
       _ -> error(:encode, prefix)
     end
   end
@@ -132,13 +130,13 @@ defmodule Prefix.IP do
   def encode(digits) when ip4?(digits), do: encode({digits, 32})
   def encode(digits) when ip6?(digits), do: encode({digits, 128})
 
-  def encode({digits = {a, b, c, d}, len}) when dig4?(digits, len) do
+  def encode({digits = {a, b, c, d}, len}) when digits4?(digits, len) do
     <<bits::bitstring-size(len), _::bitstring>> = <<a::8, b::8, c::8, d::8>>
 
     %Prefix{bits: bits, maxlen: 32}
   end
 
-  def encode({digits = {a, b, c, d, e, f, g, h}, len}) when dig6?(digits, len) do
+  def encode({digits = {a, b, c, d, e, f, g, h}, len}) when digits6?(digits, len) do
     <<bits::bitstring-size(len), _::bitstring>> =
       <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>>
 
@@ -196,12 +194,12 @@ defmodule Prefix.IP do
   def decode(digits) when ip6?(digits),
     do: "#{:inet.ntoa(digits)}"
 
-  def decode({digits, len}) when dig4?(digits, len) do
+  def decode({digits, len}) when digits4?(digits, len) do
     pfx = :inet.ntoa(digits)
     if len < 32, do: "#{pfx}/#{len}", else: "#{pfx}"
   end
 
-  def decode({digits, len}) when dig6?(digits, len) do
+  def decode({digits, len}) when digits6?(digits, len) do
     pfx = :inet.ntoa(digits)
     if len < 128, do: "#{pfx}/#{len}", else: "#{pfx}"
   end
