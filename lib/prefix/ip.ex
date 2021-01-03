@@ -1,17 +1,28 @@
 defmodule Prefix.IP do
   @behaviour Prefix
   @moduledoc """
-  Functions to encode/decode IP prefixes.
+  Encode/decode IP prefixes.
 
-  Note: prepends either a `0`- or an `1`-bit to distinguish between ip4 and ip6
-  prefixes respectively.  That way, IP prefixes can be stored in a single
-  radix tree referencing the prefix.bits directly.
+  An IP prefix can be given as:
+  - a `t:String.t/0` using CIDR notation (mask is optional)
+  - a `t::inet.ip_address/0`, or
+  - a `t:digits/0`
+
+  Succesfull encoding yields a `t:Prefix.t/0` result, while decoding always
+  results in a string using CIDR-notation upon success.  In case of any errors,
+  both return a `t:PrefixError/0` exception.
 
   """
 
   use Bitwise
   require Prefix
   alias PrefixError
+
+  @typedoc """
+  An :inet IPv4 or IPv6 address.
+
+  """
+  @type address :: :inet.ip4_address() | :inet.ip6_address()
 
   @typedoc """
   An IPv4 or IPv6 prefix in `{address, length}`-format.
@@ -21,6 +32,9 @@ defmodule Prefix.IP do
   # GUARDS
 
   # guards for {digits, len}
+  @doc """
+  Ensure len is a valid ip4 length.
+  """
   defguard len4?(l) when is_integer(l) and l > -1 and l < 33
   defguard len6?(l) when is_integer(l) and l > -1 and l < 129
 
@@ -47,8 +61,8 @@ defmodule Prefix.IP do
   defguard dig?(digits, len) when dig4?(digits, len) or dig6?(digits, len)
 
   # guards for prefixes
-  defguard prefix4?(x) when Prefix.valid?(x) and x.maxlen == 33
-  defguard prefix6?(x) when Prefix.valid?(x) and x.maxlen == 129
+  defguard prefix4?(x) when Prefix.valid?(x) and x.maxlen == 32
+  defguard prefix6?(x) when Prefix.valid?(x) and x.maxlen == 128
 
   @compile inline: [error: 2]
   defp error(id, detail), do: PrefixError.new(id, detail)
