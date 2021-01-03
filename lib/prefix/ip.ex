@@ -4,13 +4,13 @@ defmodule Prefix.IP do
   Encode/decode IP prefixes.
 
   An IP prefix can be given as:
-  - a `t:String.t/0` using CIDR notation (mask is optional)
+  - a `t:String.t/0` in CIDR notation (mask is optional)
   - a `t::inet.ip_address/0`, or
   - a `t:digits/0`
 
-  Succesfull encoding yields a `t:Prefix.t/0` result, while decoding always
-  results in a string using CIDR-notation upon success.  In case of any errors,
-  both return a `t:PrefixError/0` exception.
+  Succesfull encoding yields a `t:Prefix.t/0` result, while decoding results in
+  a string in CIDR notation upon success.  In case of any errors, both
+  return a `t:PrefixError.t/0` exception.
 
   """
 
@@ -66,10 +66,10 @@ defmodule Prefix.IP do
   #
 
   @doc """
-  Encode an IP *prefix* into a `Prefix`.
+  Encode *prefix* into `t:Prefix.t/0`.
 
-  Where *prefix* is either a string using CIDR notation, a `t::inet.ip_address/0`
-  or a `t:digits/0`
+  The '/len' in a prefix in CIDR notation is optional and defaults to its
+  maximum length.  Encoding does not preserve the host bits of the address.
 
   ## Examples
 
@@ -89,10 +89,7 @@ defmodule Prefix.IP do
       iex> encode("acdc:1976::/32")
       %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128}
 
-      iex> encode("acdc:1976::")
-      %Prefix{bits: <<0xacdc::16, 0x1976::16, 0::16, 0::16, 0::16, 0::16, 0::16, 0::16>>, maxlen: 128}
-
-      # an exception as argument is passed through
+      # exceptions are passed through
       iex> decode("illegal") |> encode()
       %PrefixError{id: :decode, detail: "illegal"}
 
@@ -149,21 +146,18 @@ defmodule Prefix.IP do
   # Decode
 
   @doc """
-  Decode a *prefix* back into string, using CIDR-notation.
+  Decode *prefix* back into a string in CIDR notation.
 
-  Where *prefix* is either a string using CIDR notation, a `t::inet.ip_address/0`
-  or a `t:digits/0`
-
-  For full addresses the '/length' is omitted.  When decoding a `t:digits/0`,
-  the mask is *not* applied first.
+  When decoding `t:digits/0`, the mask is *not* applied first.  For full length
+  prefixes, the '/len' will be omitted in the result.
 
   ## Examples
 
-      iex> decode({1, 1, 1, 1})
-      "1.1.1.1"
-
       iex> decode(%Prefix{bits: <<1, 1, 1>>, maxlen: 32})
       "1.1.1.0/24"
+
+      iex> decode({1, 1, 1, 1})
+      "1.1.1.1"
 
       # host bits are preserved
       iex> decode({{1, 1, 1, 1}, 24})
