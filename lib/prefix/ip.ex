@@ -14,29 +14,15 @@ defmodule Prefix.IP do
   alias PrefixError
 
   @typedoc """
-  An IPv4 prefix in `{digits, length}`-format.
-
+  An IPv4 or IPv6 prefix in `{address, length}`-format.
   """
-  @type digits4 :: {{0..255, 0..255, 0..255, 0..255}, 0..32}
-
-  @typedoc """
-  An IPv6 prefix in `{digits, length}`-format.
-
-  """
-  @type digits6 ::
-          {{0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535, 0..65535},
-           0..128}
-
-  @typedoc """
-  An IPv4 or IPv6 prefix in `{digits, length}`-format.
-  """
-  @type digits :: digits4() | digits6()
+  @type digits :: {:inet.ip4_address(), 0..32} | {:inet.ip6_address(), 0..128}
 
   # GUARDS
 
   # guards for {digits, len}
-  defguard len4?(l) when is_integer(l) and l in 0..32
-  defguard len6?(l) when is_integer(l) and l in 0..128
+  defguard len4?(l) when is_integer(l) and l > -1 and l < 33
+  defguard len6?(l) when is_integer(l) and l > -1 and l < 129
 
   defguard ip4?(t)
            when is_tuple(t) and
@@ -76,8 +62,8 @@ defmodule Prefix.IP do
   @doc """
   Encode an IP *prefix* into a `Prefix`.
 
-  The *prefix* can be a string using CIDR notation or in `{digits,
-  length}`-format.
+  Where *prefix* is either a string using CIDR notation, a `t::inet.ip_address/0`
+  or a `t:digits/0`
 
   ## Examples
 
@@ -87,8 +73,20 @@ defmodule Prefix.IP do
       iex> encode("1.1.1.1")
       %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
 
+      iex> encode({1,1,1,1})
+      %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
+
+      # host bits are lost in translation
+      iex> encode({{1,1,1,1}, 24})
+      %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
+      iex> encode("1.1.1.1/24")
+      %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
+
       iex> encode("acdc:1976::/32")
       %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128}
+
+      iex> encode("acdc:1976::")
+      %Prefix{bits: <<0xacdc::16, 0x1976::16, 0::16, 0::16, 0::16, 0::16, 0::16, 0::16>>, maxlen: 128}
 
   """
 
