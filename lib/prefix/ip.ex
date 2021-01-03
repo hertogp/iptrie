@@ -60,10 +60,6 @@ defmodule Prefix.IP do
   defguard dig6?(digits, len) when ip6?(digits) and len6?(len)
   defguard dig?(digits, len) when dig4?(digits, len) or dig6?(digits, len)
 
-  # guards for prefixes
-  defguard prefix4?(x) when Prefix.valid?(x) and x.maxlen == 32
-  defguard prefix6?(x) when Prefix.valid?(x) and x.maxlen == 128
-
   @compile inline: [error: 2]
   defp error(id, detail), do: PrefixError.new(id, detail)
 
