@@ -143,9 +143,6 @@ defmodule Prefix do
   def decode(arg, module), do: module.decode(arg)
   # Guards
 
-  # Guard that ensures *bits* is a bitstring and *maxlen* a non-neg-integer.
-  defguardp types?(bits, maxlen) when is_bitstring(bits) and is_integer(maxlen) and maxlen >= 0
-
   @doc """
   Guard that ensures a given *prefix* is actually valid.
   - it is a `t:Prefix.t/0` struct
@@ -175,12 +172,17 @@ defmodule Prefix do
                   width > -1 and
                   width <= prefix.maxlen - bit_size(prefix.bits)
 
-  @doc """
-  Guard that ensures a proposed new *size* is valid for given *prefix*.
+  # Private guards
 
-  """
-  defguard size?(prefix, size)
-           when valid?(prefix) and size in 0..prefix.maxlen
+  # guard that ensures *bits* is a bitstring and *maxlen* a non-neg-integer.
+  defguardp types?(bits, maxlen) when is_bitstring(bits) and is_integer(maxlen) and maxlen >= 0
+
+  # validate arguments for slice function
+  defguardp slice?(prefix, size)
+            when valid?(prefix) and
+                   is_integer(size) and
+                   size >= bit_size(prefix.bits) and
+                   size <= prefix.maxlen
 
   # Helpers
 
@@ -553,7 +555,7 @@ defmodule Prefix do
 
   """
   @spec slice(t, pos_integer) :: list(t) | PrefixError.t()
-  def slice(prefix, newlen) when size?(prefix, newlen) and newlen >= bit_size(prefix.bits) do
+  def slice(prefix, newlen) when slice?(prefix, newlen) and newlen >= bit_size(prefix.bits) do
     width = newlen - bit_size(prefix.bits)
     max = (1 <<< width) - 1
 
