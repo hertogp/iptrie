@@ -3,11 +3,6 @@ defmodule Prefix.IP do
   @moduledoc """
   Encode/decode IP prefixes.
 
-  An IP prefix can be given as:
-  - a `t:String.t/0` in CIDR notation (mask is optional)
-  - a `t::inet.ip_address/0`, or
-  - a `t:digits/0`
-
   Succesfull encoding yields a `t:Prefix.t/0` result, while decoding results in
   a string in CIDR notation upon success.  In case of any errors, both
   return a `t:PrefixError.t/0` exception.
@@ -56,7 +51,6 @@ defmodule Prefix.IP do
 
   defguardp digits4?(digits, len) when ip4?(digits) and len4?(len)
   defguardp digits6?(digits, len) when ip6?(digits) and len6?(len)
-  defguardp digits?(digits, len) when digits4?(digits, len) or digits6?(digits, len)
 
   @compile inline: [error: 2]
   defp error(id, detail), do: PrefixError.new(id, detail)
@@ -68,8 +62,7 @@ defmodule Prefix.IP do
   @doc """
   Encode *prefix* into `t:Prefix.t/0`.
 
-  The '/len' in a prefix in CIDR notation is optional and defaults to its
-  maximum length.  Encoding does not preserve the host bits of the address.
+  Note: encoding does not preserve the host bits of the address.
 
   ## Examples
 
@@ -119,7 +112,7 @@ defmodule Prefix.IP do
       {:error, _} -> error(:encode, prefix)
       {_, :error} -> error(:encode, prefix)
       {digits, :none} -> encode(digits)
-      {digits, {len, ""}} when digits?(digits, len) -> encode({digits, len})
+      {digits, {len, ""}} -> encode({digits, len})
       _ -> error(:encode, prefix)
     end
   end
@@ -163,7 +156,7 @@ defmodule Prefix.IP do
       iex> decode({{1, 1, 1, 1}, 24})
       "1.1.1.1/24"
 
-      # an exception as argument is passed through
+      # exceptions are passed through
       iex> encode("illegal") |> decode()
       %PrefixError{id: :encode, detail: "illegal"}
 
