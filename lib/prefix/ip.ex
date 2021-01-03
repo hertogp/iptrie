@@ -25,16 +25,14 @@ defmodule Prefix.IP do
   defguard len6?(l) when is_integer(l) and l > -1 and l < 129
 
   defguard ip4?(t)
-           when is_tuple(t) and
-                  tuple_size(t) == 4 and
+           when tuple_size(t) == 4 and
                   elem(t, 0) in 0..255 and
                   elem(t, 1) in 0..255 and
                   elem(t, 2) in 0..255 and
                   elem(t, 3) in 0..255
 
   defguard ip6?(t)
-           when is_tuple(t) and
-                  tuple_size(t) == 8 and
+           when tuple_size(t) == 8 and
                   elem(t, 0) in 0..65535 and
                   elem(t, 1) in 0..65535 and
                   elem(t, 2) in 0..65535 and
