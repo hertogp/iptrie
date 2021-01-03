@@ -2,7 +2,7 @@ defmodule PrefixError do
   defexception [:id, :detail]
 
   @typedoc """
-  An exception struct with members `id` and `detail`.
+  An exception struct with fields `id` and `detail`.
 
   Used by Prefix and its domain specific submodules to report errors
   encountered during encoding/decoding/formatting prefixes.
@@ -64,14 +64,15 @@ defmodule Prefix do
       %Prefix{bits: <<192, 63, 213>>, maxlen: 48}         # MAC OUI
 
 
-  The module contains generic functions to work with prefixes, while parsing
-  is delegated to domain specific submodules that implement Prefix' behaviour.
+  The module contains generic functions to work with prefixes, while parsing is
+  delegated to domain specific submodules that implement Prefix's encode/decode
+  behaviour.
 
-  In general, Prefix functions either return some value or a t:PrefixError.t/0`
+  In general, Prefix functions either return some value or a `t:PrefixError.t/0`
   in case of any errors.  These exceptions are also passed through if given
   where a prefix was expected.
 
-  A *prefix* is also enumerable:
+  A *prefix* is enumerable:
 
       iex> pfx = new(<<10,10,10,0::6>>, 32)
       iex> for ip <- pfx do ip end
@@ -92,14 +93,15 @@ defmodule Prefix do
       iex> "#{new(<<10, 11, 12>>, 32)}"
       "10.11.12.0/24"
 
-      iex> "#{new(<<10, 11, 12, 14>>, 32)}"
-      "10.11.12.14"
-
       iex> "#{new(<<0xACDC::16, 0x1976::16>>, 128)}"
       "ACDC:1976:0:0:0:0:0:0/32"
 
       iex> "#{new(<<0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6>>, 48)}"
       "A1:B2:C3:D4:E5:F6"
+
+      iex> "#{new(<<1, 2, 3, 4, 5>>, 64)}"
+      "1.2.3.4.5.0.0.0/40"
+
 
   So the list comprehension earlier, could also read:
 
@@ -117,7 +119,7 @@ defmodule Prefix do
   defstruct bits: nil, maxlen: nil
 
   @typedoc """
-  A prefix struct with members `bits` and `maxlen`.
+  A prefix struct with fields `bits` and `maxlen`.
 
   """
   @type t :: %__MODULE__{bits: <<_::_*1>>, maxlen: pos_integer}
@@ -141,7 +143,11 @@ defmodule Prefix do
   @callback decode(t) :: term | PrefixError.t()
 
   def decode(arg, module), do: module.decode(arg)
+
   # Guards
+
+  defguardp types?(bits, maxlen) when is_bitstring(bits) and is_integer(maxlen) and maxlen >= 0
+  defguardp inrange?(x, y, z) when is_integer(x) and y <= x and x <= z
 
   @doc """
   Guard that ensures a given *prefix* is actually valid.
@@ -154,35 +160,19 @@ defmodule Prefix do
                   bit_size(prefix.bits) <= prefix.maxlen
 
   @doc """
-  Guard that ensures both prefixes are valid and comparable.
-  - must both be valid prefixes
-  - must both have the same *maxlen*
+  Guard that ensures both prefixes are valid and comparable (same maxlen).
 
   """
   defguard valid?(x, y)
            when valid?(x) and valid?(y) and x.maxlen == y.maxlen
 
-  @doc """
-  Guard that ensures *pfx* has *width*-bits to spare.
-
-  """
-  defguard width?(prefix, width)
-           when valid?(prefix) and
-                  is_integer(width) and
-                  width > -1 and
-                  width <= prefix.maxlen - bit_size(prefix.bits)
-
-  # Private guards
-
-  # guard that ensures *bits* is a bitstring and *maxlen* a non-neg-integer.
-  defguardp types?(bits, maxlen) when is_bitstring(bits) and is_integer(maxlen) and maxlen >= 0
+  # ensure prefix *x* has width *w*-bits to spare.
+  defguardp width?(x, w) when valid?(x) and inrange?(w, 0, x.maxlen - bit_size(x.bits))
 
   # validate arguments for slice function
-  defguardp slice?(prefix, size)
-            when valid?(prefix) and
-                   is_integer(size) and
-                   size >= bit_size(prefix.bits) and
-                   size <= prefix.maxlen
+  defguardp slice?(x, size) when valid?(x) and inrange?(size, bit_size(x.bits), x.maxlen)
+
+  # Private guards
 
   # Helpers
 
@@ -244,20 +234,25 @@ defmodule Prefix do
   @doc """
   Return a *prefix*'s bit-value at given *position*.
 
+  A bit position beyond the *prefix.bits*-length always yields a `0`,
+  regardless of whether it is also beyond *prefix.maxlen*.
+
   """
   @spec bit(t, pos_integer) :: 0..1 | PrefixError.t()
-  def bit(prefix, position) when position > bit_size(prefix.bits), do: 0
+  def bit(prefix, position)
+      when is_integer(position) and position > bit_size(prefix.bits),
+      do: 0
 
-  def bit(prefix, pos) when pos > 0 do
+  def bit(prefix, pos) when is_integer(pos) and pos < bit_size(prefix.bits) do
     <<_::size(pos), bit::1, _::bitstring>> = prefix.bits
     bit
   end
 
   def bit(x, _) when is_exception(x), do: x
-  def bit(x, p), do: error(:bit, {x, p})
+  def bit(x, y), do: error(:bit, {x, y})
 
   @doc """
-  Return a bitwise NOT of the prefix.
+  A bitwise NOT of the *prefix.bits*.
 
   ## Example
 
@@ -280,7 +275,7 @@ defmodule Prefix do
   def bnot(x), do: error(:bnot, x)
 
   @doc """
-  Return a bitwise AND of two prefixes.
+  A bitwise AND of two prefixes.
 
   ## Example
 
@@ -308,7 +303,7 @@ defmodule Prefix do
   def band(x, y), do: error(:band, {x, y})
 
   @doc """
-  Return a bitwise OR of the prefixes.
+  A bitwise OR of two prefixes.
 
   ## Example
 
@@ -341,7 +336,7 @@ defmodule Prefix do
   def bor(x, y), do: error(:bor, {x, y})
 
   @doc """
-  Return a bitwise XOR of the prefixes.
+  A bitwise XOR of two prefixes.
 
   ## Example
 
@@ -373,7 +368,7 @@ defmodule Prefix do
   def bxor(x, y), do: error(:bxor, {x, y})
 
   @doc """
-  Rotate the prefix bits n-positions
+  Rotate the *prefix.bits* by *n* positions.
 
   ## Example
 
@@ -388,20 +383,20 @@ defmodule Prefix do
 
   """
   @spec brot(t, integer) :: t | PrefixError.t()
-  def brot(prefix, shift) when shift < 0 do
+  def brot(prefix, n) when is_integer(n) and n < 0 do
     plen = bit_size(prefix.bits)
-    brot(prefix, plen + rem(shift, plen))
+    brot(prefix, plen + rem(n, plen))
   end
 
-  def brot(prefix, shift) when valid?(prefix) and is_integer(shift) do
+  def brot(prefix, n) when valid?(prefix) and is_integer(n) do
     width = bit_size(prefix.bits)
-    shift = rem(shift, width)
+    n = rem(n, width)
     x = cast_int(prefix.bits, width)
-    m = ~~~(1 <<< shift)
+    m = ~~~(1 <<< n)
     r = x &&& m
-    l = x >>> shift
-    lw = width - shift
-    %Prefix{prefix | bits: <<r::size(shift), l::size(lw)>>}
+    l = x >>> n
+    lw = width - n
+    %Prefix{prefix | bits: <<r::size(n), l::size(lw)>>}
   end
 
   def brot(x, _) when is_exception(x), do: x
@@ -409,7 +404,7 @@ defmodule Prefix do
   def brot(x, y), do: error(:brot, {x, y})
 
   @doc """
-  Arithmetic shift left for prefix.
+  Arithmetic shift left the *prefix.bits* by *n* positions.
 
   ## Example
 
@@ -421,19 +416,18 @@ defmodule Prefix do
 
   """
   @spec bsl(t, integer) :: t | PrefixError.t()
-  def bsl(prefix, shift) when valid?(prefix) and is_integer(shift) do
+  def bsl(prefix, n) when valid?(prefix) and is_integer(n) do
     width = bit_size(prefix.bits)
     x = cast_int(prefix.bits, width)
-    x = x <<< shift
+    x = x <<< n
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
 
   def bsl(x, _) when is_exception(x), do: x
-  def bsl(_, x) when is_exception(x), do: x
   def bsl(x, y), do: error(:bsl, {x, y})
 
   @doc """
-  Arithmetic shift right for prefix.
+  Arithmetic shift right the *prefix.bits* by *n* positions.
 
   ## Example
 
@@ -445,20 +439,21 @@ defmodule Prefix do
 
   """
   @spec bsr(t, integer) :: t | PrefixError.t()
-  def bsr(prefix, shift) do
+  def bsr(prefix, n) when valid?(prefix) and is_integer(n) do
     width = bit_size(prefix.bits)
     x = cast_int(prefix.bits, width)
-    x = x >>> shift
+    x = x >>> n
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
 
-  def bsr(x) when is_exception(x), do: x
-  def bsr(x), do: error(:bsr, x)
+  def bsr(x, _) when is_exception(x), do: x
+  def bsr(x, y), do: error(:bsr, {x, y})
 
   @doc """
-  Right pad the *prefix* with *nbits* of `0` or `1`'s.
+  Right pad the *prefix.bits* with *n* bits of either `0` or `1`'s.
 
-  Defaults to full padding using zero's, results is clipped to prefix's *maxlen*.
+  Defaults to full padding using zero's. When given a *n*-number of bits to
+  add, the result is clipped to prefix's *maxlen*.
 
   ## Examples
 
@@ -486,9 +481,9 @@ defmodule Prefix do
   def padr(x, bit) when valid?(x), do: padr(x, bit, x.maxlen)
 
   @spec padr(t, 0..1, pos_integer) :: t | PrefixError.t()
-  def padr(prefix, bit, nbits) when valid?(prefix) do
+  def padr(prefix, bit, n) when valid?(prefix) and is_integer(n) do
     bsize = bit_size(prefix.bits)
-    nbits = min(nbits, prefix.maxlen - bsize)
+    nbits = min(n, prefix.maxlen - bsize)
     width = bsize + nbits
     y = if bit == 0, do: 0, else: (1 <<< nbits) - 1
     x = cast_int(prefix.bits, width) + y
@@ -500,9 +495,10 @@ defmodule Prefix do
   def padr(x, b, n), do: error(:padr, {x, b, n})
 
   @doc """
-  Left pad a *prefix* with *nbits* of `0` or `1`'s.
+  Left pad the *prefix.bits* with *n*-bits of either `0` or `1`'s.
 
-  Defaults to full padding using zero's, results is clipped to prefix's *maxlen*.
+  Defaults to full padding using zero's. When given a *n*-number of bits to
+  add, the result is clipped to prefix's *maxlen*.
 
   ## Examples
 
@@ -523,9 +519,9 @@ defmodule Prefix do
   def padl(x, bit) when valid?(x), do: padl(x, bit, x.maxlen)
 
   @spec padl(t, 0..1, pos_integer) :: t | PrefixError.t()
-  def padl(prefix, bit, nbits) when valid?(prefix) do
+  def padl(prefix, bit, n) when valid?(prefix) and is_integer(n) do
     bsize = bit_size(prefix.bits)
-    nbits = min(nbits, prefix.maxlen - bsize)
+    nbits = min(n, prefix.maxlen - bsize)
     y = if bit == 0, do: 0, else: (1 <<< nbits) - 1
     x = cast_int(prefix.bits, bsize)
 
@@ -536,11 +532,10 @@ defmodule Prefix do
   def padl(x, b, n), do: error(:padl, {x, b, n})
 
   @doc """
-  Subdivide a *prefix* into a list of smaller pieces, each *newlen* bits long.
+  Slice a *prefix* into a list of smaller pieces, each *newlen* bits long.
 
-  Turn a prefix into a list of subsequent smaller prefixes.  *newlen* must be
-  larger than or equal to the prefix' current bit length, else it is considered
-  an error.
+  The given *newlen* must be larger than or equal to the prefix' current bit
+  length, else it is considered an error.
 
   ## Examples
 
@@ -555,7 +550,7 @@ defmodule Prefix do
 
   """
   @spec slice(t, pos_integer) :: list(t) | PrefixError.t()
-  def slice(prefix, newlen) when slice?(prefix, newlen) and newlen >= bit_size(prefix.bits) do
+  def slice(prefix, newlen) when slice?(prefix, newlen) do
     width = newlen - bit_size(prefix.bits)
     max = (1 <<< width) - 1
 
@@ -587,13 +582,13 @@ defmodule Prefix do
 
       iex> new(<<10, 11, 12>>, 32)
       ...> |> fields(1)
-      ...> |> Enum.map(fn {x, _y} -> x end)
+      ...> |> Enum.map(fn {x, _} -> x end)
       ...> |> Enum.join("")
       "000010100000101100001100"
 
   """
   @spec fields(t, pos_integer) :: list({pos_integer, pos_integer}) | PrefixError.t()
-  def fields(prefix, width) when valid?(prefix),
+  def fields(prefix, width) when valid?(prefix) and is_integer(width) and width > 0,
     do: fields([], prefix.bits, width)
 
   def fields(x, _) when is_exception(x), do: x
@@ -644,13 +639,19 @@ defmodule Prefix do
 
   """
   @spec digits(t, pos_integer) :: {tuple(), pos_integer} | PrefixError.t()
-  def digits(prefix, width) when valid?(prefix) and width > 0 do
-    prefix
-    |> padr()
-    |> fields(width)
-    |> Enum.map(fn {n, _w} -> n end)
-    |> List.to_tuple()
-    |> (&{&1, bit_size(prefix.bits)}).()
+  def digits(%Prefix{} = prefix, width) do
+    try do
+      digits =
+        prefix
+        |> padr()
+        |> fields(width)
+        |> Enum.map(fn {n, _w} -> n end)
+        |> List.to_tuple()
+
+      {digits, bit_size(prefix.bits)}
+    rescue
+      _ -> error(:digits, {prefix, width})
+    end
   end
 
   def digits(x, _) when is_exception(x), do: x
@@ -680,8 +681,7 @@ defmodule Prefix do
 
   """
   @spec undigits({tuple(), pos_integer}, pos_integer) :: t | PrefixError.t()
-  def undigits({digits, length}, width)
-      when tuple_size(digits) > 0 and length >= 0 and width >= 0 do
+  def undigits({digits, length}, width) do
     try do
       bits =
         digits
@@ -693,8 +693,7 @@ defmodule Prefix do
       Prefix.new(bits, tuple_size(digits) * width)
     rescue
       # in case digits-tuple contains non-integers
-      _ ->
-        error(:undigits, {{digits, length}, width})
+      _ -> error(:undigits, {{digits, length}, width})
     end
   end
 
@@ -735,7 +734,7 @@ defmodule Prefix do
 
   """
   @spec sibling(t, integer) :: t | PrefixError.t()
-  def sibling(prefix, offset) when valid?(prefix) do
+  def sibling(prefix, offset) when valid?(prefix) and is_integer(offset) do
     bsize = bit_size(prefix.bits)
     x = cast_int(prefix.bits, bit_size(prefix.bits))
     x = x + offset
@@ -832,10 +831,11 @@ defmodule Prefix do
   def member(prefix, nth) when valid?(prefix),
     do: member(prefix, nth, prefix.maxlen - bit_size(prefix.bits))
 
-  def member(x, _nth) when is_exception(x), do: x
+  def member(x, _) when is_exception(x), do: x
+  def member(x, y), do: error(:member, {x, y})
 
   @spec member(t, integer, pos_integer) :: t | PrefixError.t()
-  def member(pfx, nth, width) when valid?(pfx) and width?(pfx, width),
+  def member(pfx, nth, width) when valid?(pfx) and is_integer(nth) and width?(pfx, width),
     do: %{pfx | bits: <<pfx.bits::bits, nth::size(width)>>}
 
   def member(x, _, _) when is_exception(x), do: x
@@ -950,41 +950,36 @@ defmodule Prefix do
       iex> compare(new(<<10>>, 32), new(<<11>>, 32))
       :lt
 
-      iex> compare(new(<<11>>, 32), new(<<10>>, 32))
-      :gt
+      # sort prefix.bits size first, than on prefix.bits values
+      iex> l = [new(<<10, 11>>, 32), new(<<10,10,10>>, 32), new(<<10,10>>, 32)]
+      iex> Enum.sort(l, Prefix)
+      [ %Prefix{bits: <<10, 10, 10>>, maxlen: 32},
+        %Prefix{bits: <<10, 10>>, maxlen: 32},
+        %Prefix{bits: <<10, 11>>, maxlen: 32}
+      ]
 
-      iex> compare(new(<<10>>, 32), new(<<10>>, 32))
-      :eq
+      # whereas regular sort does:
+      iex> l = [<<10, 11>>, <<10,10,10>>, <<10,10>>]
+      iex> Enum.sort(l)
+      [ <<10, 10>>,
+        <<10, 10, 10>>,
+        <<10, 11>>
+      ]
 
+      # prefixes must have the same maxlen
       iex> compare(new(<<10>>, 32), new(<<10>>, 128))
       %PrefixError{
         id: :compare,
         detail: {%Prefix{bits: <<10>>, maxlen: 32}, %Prefix{bits: <<10>>, maxlen: 128}}
       }
 
-      # sort on prefix size, longest prefix comes first
-      iex> l = [new(<<10>>, 32), new(<<10,10,10>>, 32), new(<<10,10>>, 32)]
-      iex> Enum.sort(l, Prefix)
-      [ %Prefix{bits: <<10,10,10>>, maxlen: 32},
-        %Prefix{bits: <<10,10>>, maxlen: 32},
-        %Prefix{bits: <<10>>, maxlen: 32}
-      ]
 
-      # sort on bitvalues, since all have the same length
-      iex> l = [new(<<11>>, 128), new(<<12>>, 128), new(<<10>>, 128)]
-      iex> Enum.sort(l, Prefix)
-      [ %Prefix{bits: <<10>>, maxlen: 128},
-        %Prefix{bits: <<11>>, maxlen: 128},
-        %Prefix{bits: <<12>>, maxlen: 128}
-      ]
   """
-
   @spec compare(t, t) :: :eq | :lt | :gt | PrefixError.t()
-  def compare(prefix1, prefix2) when valid?(prefix1, prefix2),
-    do: comparep(prefix1.bits, prefix2.bits)
-
+  def compare(prefix1, prefix2)
+  def compare(x, y) when valid?(x, y), do: comparep(x.bits, y.bits)
   def compare(x, _) when is_exception(x), do: x
-  def compare(_, x) when is_exception(x), do: x
+  def compare(_, y) when is_exception(y), do: y
   def compare(x, y), do: error(:compare, {x, y})
 
   defp comparep(x, y) when bit_size(x) > bit_size(y), do: :lt
@@ -1032,20 +1027,14 @@ defmodule Prefix do
   def contrast(_, y) when is_exception(y), do: y
   def contrast(x, y), do: error(:contrast, {x, y})
 
-  # contrast the bits
-  defp contrastp(x, y) when x == y, do: :equal
+  defp contrastp(x, y) when x == y,
+    do: :equal
 
-  defp contrastp(x, y) when bit_size(x) > bit_size(y) do
-    if y == truncate(x, bit_size(y)),
-      do: :more,
-      else: :disjoint
-  end
+  defp contrastp(x, y) when bit_size(x) > bit_size(y),
+    do: if(y == truncate(x, bit_size(y)), do: :more, else: :disjoint)
 
-  defp contrastp(x, y) when bit_size(x) < bit_size(y) do
-    if x == truncate(y, bit_size(x)),
-      do: :less,
-      else: :disjoint
-  end
+  defp contrastp(x, y) when bit_size(x) < bit_size(y),
+    do: if(x == truncate(y, bit_size(x)), do: :less, else: :disjoint)
 
   defp contrastp(x, y) do
     size = bit_size(x) - 1
@@ -1053,9 +1042,7 @@ defmodule Prefix do
     <<m::bitstring-size(size), _::1>> = y
 
     if n == m do
-      if n1 == 0,
-        do: :left,
-        else: :right
+      if n1 == 0, do: :left, else: :right
     else
       :disjoint
     end
