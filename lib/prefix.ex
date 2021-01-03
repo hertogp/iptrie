@@ -620,7 +620,7 @@ defmodule Prefix do
   Transform a *prefix* into a `{digits, len}` format.
 
   The *prefix* is padded to its maximum length using `0`'s and the resulting
-  bits are grouped into numbers, each *width*-bits wide.  The resulting *len*
+  bits are grouped into *digits*, each *width*-bits wide.  The resulting *len*
   preserves the original bitstring length.  Note: works best if prefix'
   *maxlen* is a multiple of the *width* used, otherwise *maxlen* cannot be
   inferred from this format in combination with *width*.
@@ -711,23 +711,25 @@ defmodule Prefix do
   This basically increases or decreases the number represented by the *prefix*
   bits.
 
-  Note that the length of *prefix.bits* will not change.
+  Note that the length of *prefix.bits* will not change and when cycling
+  through all other siblings, you're looking at yourself (i.e. it wraps
+  around).
 
   ## Examples
 
+      # next in line
       iex> new(<<10, 11>>, 32) |> sibling(1)
       %Prefix{bits: <<10, 12>>, maxlen: 32}
 
-      iex> new(<<10, 11, 0>>, 32) |> sibling(1)
-      %Prefix{bits: <<10, 11, 1>>, maxlen: 32}
-
+      # and the last shall be first
       iex> new(<<10, 11, 0>>, 32) |> sibling(255)
       %Prefix{bits: <<10, 11, 255>>, maxlen: 32}
 
+      # still all in the family
       iex> new(<<10, 11, 0>>, 32) |> sibling(256)
       %Prefix{bits: <<10, 12, 0>>, maxlen: 32}
 
-      # wraps around address boundaries
+      # from one end to another
       iex> new(<<0, 0, 0, 0>>, 32) |> sibling(-1)
       %Prefix{bits: <<255, 255, 255, 255>>, maxlen: 32}
 

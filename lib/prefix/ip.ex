@@ -84,6 +84,9 @@ defmodule Prefix.IP do
       iex> encode("1.1.1.0/24")
       %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
 
+      iex> encode("1.1.1.1")
+      %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
+
       iex> encode("acdc:1976::/32")
       %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128}
 
@@ -97,7 +100,7 @@ defmodule Prefix.IP do
       |> String.split("/", parts: 2)
       |> case do
         [addr, len] -> {addr, Integer.parse(len)}
-        [addr] -> {addr, {-1, ""}}
+        [addr] -> {addr, :none}
       end
 
     digits =
@@ -105,14 +108,14 @@ defmodule Prefix.IP do
       |> String.to_charlist()
       |> :inet.parse_address()
       |> case do
-        {:error, _} -> error(:encode, prefix)
+        {:error, _} -> :error
         {:ok, digits} -> digits
       end
 
     case {digits, len} do
-      {x, _} when is_exception(x) -> x
+      {:error, _} -> error(:encode, prefix)
       {_, :error} -> error(:encode, prefix)
-      {digits, {-1, ""}} -> encode(digits)
+      {digits, :none} -> encode(digits)
       {digits, {len, ""}} when dig?(digits, len) -> encode({digits, len})
       _ -> error(:encode, prefix)
     end
