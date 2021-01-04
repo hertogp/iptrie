@@ -48,20 +48,19 @@ defmodule Prefix do
   alias PrefixError
 
   @moduledoc ~S"""
-  Prefixes represent a sequence of one or many full length addresses.
+  Prefixes represent a sequence of one or more full length addresses.
 
   A prefix is defined by zero or more *bits* & a *maxlen* (maximum length), and
   is internally represented by a struct.
 
-      # creating a prefix
       iex> new(<<10, 10, 10>>, 32)
-      %Prefix{bits: <<10, 10, 10>>, maxlen: 32}           # IPv4
+      %Prefix{bits: <<10, 10, 10>>, maxlen: 32}
 
       iex> new(<<0xacdc::16, 0x1976::16>>, 128)
-      %Prefix{bits: <<172, 220, 25, 118>>, maxlen: 128}   # IPv6
+      %Prefix{bits: <<172, 220, 25, 118>>, maxlen: 128}
 
       iex> new(<<0xc0, 0x3f, 0xd5>>, 48)
-      %Prefix{bits: <<192, 63, 213>>, maxlen: 48}         # MAC OUI
+      %Prefix{bits: <<192, 63, 213>>, maxlen: 48}
 
 
   The module contains generic functions to work with prefixes, while parsing is
@@ -126,19 +125,23 @@ defmodule Prefix do
 
   # Behaviour
 
+  @doc """
+  Encode a domain specific construct into a `t:Prefix.t/0`.
+
+  Implemented by submodules for `Prefix`.
+
+  """
   @callback encode(term) :: t | PrefixError.t()
 
   @doc """
-  Encode a domain specific constructs into a `t:Prefix.t/0`, raises
-  `t:PrefixError.t/0`-struct on errors.
+  Encode a domain specific construct into a `t:Prefix.t/0`, raises on errors.
 
-  ## Example
+  ## Examples
 
       iex> alias Prefix.IP
       iex> encode!("1.1.1.1", IP)
       %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
-
-      iex> alias Prefix.IP
+      #
       iex> encode!("1.1.1.256", IP)
       ** (PrefixError) encode: "1.1.1.256"
 
@@ -150,11 +153,16 @@ defmodule Prefix do
     end
   end
 
+  @doc """
+  Decode a `t:Prefix.t/0` back into a domain specific construct.
+
+  Implemented by submodules of `Prefix`.
+
+  """
   @callback decode(t) :: term | PrefixError.t()
 
   @doc """
-  Decode a `t:Prefix.t/0` back into a domain specific construct, raises
-  `t:PrefixError.t/0`-struct on errors.
+  Decode a `t:Prefix.t/0` into a domain specific construct, raises on errors.
 
   ## Examples
 
@@ -262,15 +270,26 @@ defmodule Prefix do
   # Bit Ops
 
   @doc """
-  Return a *prefix*'s bit-value at given *position*.
+  Return *prefix*'s bit-value at given *position*.
 
-  A bit position beyond the *prefix.bits*-length always yields a `0`,
-  regardless of whether it is also beyond *prefix.maxlen*.
+  A bit position is a `0`-based index from the left.  A position beyond the
+  *prefix.bits*-length always yields a `0`, regardless of whether it is also
+  beyond *prefix.maxlen*.
+
+  ## Examples
+
+      iex> x = new(<<1, 1>>, 32)
+      iex> bit(x, 7)
+      1
+      iex> bit(x, 12)
+      0
+      iex> bit(x, 12345)
+      0
 
   """
   @spec bit(t, pos_integer) :: 0..1 | PrefixError.t()
   def bit(prefix, position)
-      when is_integer(position) and position > bit_size(prefix.bits),
+      when is_integer(position) and position >= bit_size(prefix.bits),
       do: 0
 
   def bit(prefix, pos) when is_integer(pos) and pos < bit_size(prefix.bits) do
@@ -284,7 +303,7 @@ defmodule Prefix do
   @doc """
   A bitwise NOT of the *prefix.bits*.
 
-  ## Example
+  ## Examples
 
       iex> new(<<255, 255, 0, 0>>, 32) |> bnot()
       %Prefix{bits: <<0, 0, 255, 255>>, maxlen: 32}
@@ -307,7 +326,7 @@ defmodule Prefix do
   @doc """
   A bitwise AND of two prefixes.
 
-  ## Example
+  ## Examples
 
       iex> x = new(<<128, 129, 130, 131>>, 32)
       iex> y = new(<<255, 255>>, 32)
@@ -335,13 +354,15 @@ defmodule Prefix do
   @doc """
   A bitwise OR of two prefixes.
 
-  ## Example
+  ## Examples
 
+      # same size prefixes
       iex> x = new(<<10, 11, 12, 13>>, 32)
       iex> y = new(<<0, 0, 255, 255>>, 32)
       iex> bor(x, y)
       %Prefix{bits: <<10, 11, 255, 255>>, maxlen: 32}
 
+      # different sized prefixes, missing bits are considered to be `0`
       iex> x = new(<<10, 11, 12, 13>>, 32)
       iex> y = new(<<255, 255>>, 32)
       iex> bor(x, y)
@@ -368,7 +389,7 @@ defmodule Prefix do
   @doc """
   A bitwise XOR of two prefixes.
 
-  ## Example
+  ## Examples
 
       iex> x = new(<<10, 11, 12, 13>>, 32)
       iex> y = new(<<255, 255, 0, 0>>, 32)
@@ -400,7 +421,7 @@ defmodule Prefix do
   @doc """
   Rotate the *prefix.bits* by *n* positions.
 
-  ## Example
+  ## Examples
 
       iex> new(<<1, 2, 3, 4>>, 32) |> brot(8)
       %Prefix{bits: <<4, 1, 2, 3>>, maxlen: 32}
@@ -436,7 +457,7 @@ defmodule Prefix do
   @doc """
   Arithmetic shift left the *prefix.bits* by *n* positions.
 
-  ## Example
+  ## Examples
 
       iex> new(<<1, 2>>, 32) |> bsl(2)
       %Prefix{bits: <<4, 8>>, maxlen: 32}
@@ -459,7 +480,7 @@ defmodule Prefix do
   @doc """
   Arithmetic shift right the *prefix.bits* by *n* positions.
 
-  ## Example
+  ## Examples
 
       iex> new(<<1, 2>>, 32) |> bsr(2)
       %Prefix{bits: <<0, 64>>, maxlen: 32}
@@ -480,23 +501,44 @@ defmodule Prefix do
   def bsr(x, y), do: error(:bsr, {x, y})
 
   @doc """
-  Right pad the *prefix.bits* with *n* bits of either `0` or `1`'s.
+  Right pad the *prefix.bits* to its full length using `0`-bits.
 
-  Defaults to full padding using zero's. When given a *n*-number of bits to
-  add, the result is clipped to prefix's *maxlen*.
-
-  ## Examples
+  ## Example
 
       iex> new(<<1, 2>>, 32) |> padr()
       %Prefix{bits: <<1, 2, 0, 0>>, maxlen: 32}
 
+  """
+  @spec padr(t) :: t | PrefixError.t()
+  def padr(x) when valid?(x), do: padr(x, 0, x.maxlen)
+
+  @doc """
+  Right pad the *prefix.bits* to its full length using either `0` or `1`-bits.
+
+  If *bit* is anything other than `0`, `1`-bits are used for padding.
+
+  ## Example
+
       iex> new(<<1, 2>>, 32) |> padr(1)
       %Prefix{bits: <<1, 2, 255, 255>>, maxlen: 32}
 
-      iex> new(<<255, 255>>, 32) |> padr(0, 8)
-      %Prefix{bits: <<255, 255, 0>>, maxlen: 32}
+  """
+  @spec padr(t, 0..1) :: t | PrefixError.t()
+  def padr(x, bit) when valid?(x), do: padr(x, bit, x.maxlen)
 
-      iex> new(<<255, 255>>, 32) |> padr(1, 16)
+  @doc """
+  Right pad the *prefix.bits* with *n* bits of either `0` or `1`'s.
+
+  If *bit* is anything other than `0`, `1`-bits are used for padding.  The
+  result is silently clipped to its maximum length.
+
+  ## Examples
+
+      iex> prefix = new(<<255, 255>>, 32)
+      iex> padr(prefix, 0, 8)
+      %Prefix{bits: <<255, 255, 0>>, maxlen: 32}
+      #
+      iex> padr(prefix, 1, 16)
       %Prefix{bits: <<255, 255, 255, 255>>, maxlen: 32}
 
       # results are clipped to maxlen
@@ -504,12 +546,6 @@ defmodule Prefix do
       %Prefix{bits: <<1, 2, 0, 0>>, maxlen: 32}
 
   """
-  @spec padr(t) :: t | PrefixError.t()
-  def padr(x) when valid?(x), do: padr(x, 0, x.maxlen)
-
-  @spec padr(t, 0..1) :: t | PrefixError.t()
-  def padr(x, bit) when valid?(x), do: padr(x, bit, x.maxlen)
-
   @spec padr(t, 0..1, pos_integer) :: t | PrefixError.t()
   def padr(prefix, bit, n) when valid?(prefix) and is_integer(n) do
     bsize = bit_size(prefix.bits)
@@ -525,29 +561,43 @@ defmodule Prefix do
   def padr(x, b, n), do: error(:padr, {x, b, n})
 
   @doc """
-  Left pad the *prefix.bits* with *n*-bits of either `0` or `1`'s.
+  Left pad the *prefix.bits* to its full length using `0`-bits.
 
-  Defaults to full padding using zero's. When given a *n*-number of bits to
-  add, the result is clipped to prefix's *maxlen*.
-
-  ## Examples
+  ## Example
 
       iex> new(<<1, 2>>, 32) |> padl()
       %Prefix{bits: <<0, 0, 1, 2>>, maxlen: 32}
-
-      iex> new(<<1, 2>>, 32) |> padl(1)
-      %Prefix{bits: <<255, 255, 1, 2>>, maxlen: 32}
-
-      iex> new(<<>>, 32) |> padl(1, 16) |> padl(0, 16)
-      %Prefix{bits: <<0, 0, 255, 255>>, maxlen: 32}
 
   """
   @spec padl(t) :: t | PrefixError.t()
   def padl(x) when valid?(x), do: padl(x, 0, x.maxlen)
 
+  @doc """
+  Left pad the *prefix.bits* to its full length using either `0` or `1`-bits.
+
+  If *bit* is anything other than `0`, `1`-bits are used for padding.
+
+  ## Example
+
+      iex> new(<<1, 2>>, 32) |> padl(1)
+      %Prefix{bits: <<255, 255, 1, 2>>, maxlen: 32}
+
+  """
   @spec padl(t, 0..1) :: t | PrefixError.t()
   def padl(x, bit) when valid?(x), do: padl(x, bit, x.maxlen)
 
+  @doc """
+  Left pad the *prefix.bits* with *n* bits of either `0` or `1`'s.
+
+  If *bit* is anything other than `0`, `1`-bits are used for padding.  The
+  result is silently clipped to its maximum length.
+
+  ## Example
+
+      iex> new(<<>>, 32) |> padl(1, 16) |> padl(0, 16)
+      %Prefix{bits: <<0, 0, 255, 255>>, maxlen: 32}
+
+  """
   @spec padl(t, 0..1, pos_integer) :: t | PrefixError.t()
   def padl(prefix, bit, n) when valid?(prefix) and is_integer(n) do
     bsize = bit_size(prefix.bits)
@@ -560,6 +610,32 @@ defmodule Prefix do
 
   def padl(x, _, _) when is_exception(x), do: x
   def padl(x, b, n), do: error(:padl, {x, b, n})
+
+  @doc """
+  Set prefix.bits to either 0 or 1.
+
+  ## Examples
+
+      iex> new(<<1, 1, 1>>, 32) |> bset()
+      %Prefix{bits: <<0, 0, 0>>, maxlen: 32}
+
+      iex> new(<<1, 1, 1>>, 32) |> bset(1)
+      %Prefix{bits: <<255, 255, 255>>, maxlen: 32}
+
+  """
+  @spec bset(t, 0..1) :: t | PrefixError.t()
+  def bset(prefix, bit \\ 0)
+
+  def bset(prefix, bit) when valid?(prefix) do
+    bit = if bit == 0, do: 0, else: -1
+    len = bit_size(prefix.bits)
+    %{prefix | bits: <<bit::size(len)>>}
+  end
+
+  def bset(x, _) when is_exception(x), do: x
+  def bset(x, y), do: error(:bset, {x, y})
+
+  # Numbers
 
   @doc """
   Slice a *prefix* into a list of smaller pieces, each *newlen* bits long.
@@ -592,10 +668,8 @@ defmodule Prefix do
   def slice(x, _) when is_exception(x), do: x
   def slice(x, n), do: error(:slice, {x, n})
 
-  # Numbers
-
   @doc """
-  Turn a prefix into a list of `{number, width}`-fields.
+  Turn *prefix* into a list of `{number, width}`-fields.
 
   If the actual number of prefix bits are not a multiple of *width*, the last
   field will have a shorter width.
@@ -638,7 +712,7 @@ defmodule Prefix do
   end
 
   @doc """
-  Transform a *prefix* into a `{digits, len}` format.
+  Transform a *prefix* into `{digits, len}` format.
 
   The *prefix* is padded to its maximum length using `0`'s and the resulting
   bits are grouped into *digits*, each *width*-bits wide.  The resulting *len*
@@ -651,8 +725,8 @@ defmodule Prefix do
       iex> new(<<10, 11, 12>>, 32) |> digits(8)
       {{10, 11, 12, 0}, 24}
 
-      iex> new(<<0x12, 0x34, 0x56>>, 32) |> digits(4)
-      {{1, 2, 3, 4, 5, 6, 0, 0}, 24}
+      iex> new(<<0x12, 0x34, 0x56, 0x78>>, 32) |> digits(4)
+      {{1, 2, 3, 4, 5, 6, 7, 8}, 32}
 
       iex> new(<<10, 11, 12, 1::1>>, 32) |> digits(8)
       {{10, 11, 12, 128}, 25}
@@ -776,7 +850,7 @@ defmodule Prefix do
   def sibling(x, o), do: error(:sibling, {x, o})
 
   @doc """
-  The 'size' of a prefix as determined by its *missing* bits.
+  The size of *prefix* as determined by its *missing* bits.
 
   size(prefix) == 2^(prefix.maxlen - bit_size(prefix.bits))
 
@@ -787,6 +861,7 @@ defmodule Prefix do
 
       iex> new(<<10, 10, 10, 10>>, 32) |> size()
       1
+
   """
   @spec size(t) :: pos_integer | PrefixError.t()
   def size(prefix) when valid?(prefix),
@@ -796,8 +871,7 @@ defmodule Prefix do
   def size(x), do: error(:size, x)
 
   @doc """
-  Return the *nth*-member given a *prefix*, a (zero-based) *index* and an
-  optional bit-*width* for the *index*.
+  Return the *nth*-member of a given *prefix*.
 
   A prefix represents a range of (possibly longer) prefixes which can be
   seen as *members* of the prefix.  So a prefix of `n`-bits long represents:
@@ -837,25 +911,6 @@ defmodule Prefix do
       iex> new(<<10, 10, 10, 10>>, 32) |> member(0)
       %Prefix{bits: <<10, 10, 10, 10>>, maxlen: 32}
 
-      iex> new(<<10, 10, 10, 10>>, 32) |> member(1)
-      %Prefix{bits: <<10, 10, 10, 10>>, maxlen: 32}
-
-      iex> new(<<10, 10, 10, 10>>, 32) |> member(-1)
-      %Prefix{bits: <<10, 10, 10, 10>>, maxlen: 32}
-
-
-      # get the first sub-prefix that is 2 bits longer
-      iex> new(<<10, 10, 10>>, 32) |> member(0, 2)
-      %Prefix{bits: <<10, 10, 10, 0::2>>, maxlen: 32}
-
-      # get the second sub-prefix that is 2 bits longer
-      iex> new(<<10, 10, 10>>, 32) |> member(1, 2)
-      %Prefix{bits: <<10, 10, 10, 1::2>>, maxlen: 32}
-
-      # get the third sub-prefix that is 2 bits longer
-      iex> new(<<10, 10, 10>>, 32) |> member(2, 2)
-      %Prefix{bits: <<10, 10, 10, 2::2>>, maxlen: 32}
-
   """
   @spec member(t, integer) :: t | PrefixError.t()
   def member(prefix, nth) when valid?(prefix),
@@ -864,6 +919,20 @@ defmodule Prefix do
   def member(x, _) when is_exception(x), do: x
   def member(x, y), do: error(:member, {x, y})
 
+  @doc """
+  Return the *nth* subprefix for a given *prefix*, using *width* bits.
+
+  ## Examples
+
+      # the first sub-prefix that is 2 bits longer
+      iex> new(<<10, 10, 10>>, 32) |> member(0, 2)
+      %Prefix{bits: <<10, 10, 10, 0::2>>, maxlen: 32}
+
+      # the second sub-prefix that is 2 bits longer
+      iex> new(<<10, 10, 10>>, 32) |> member(1, 2)
+      %Prefix{bits: <<10, 10, 10, 1::2>>, maxlen: 32}
+
+  """
   @spec member(t, integer, pos_integer) :: t | PrefixError.t()
   def member(pfx, nth, width) when valid?(pfx) and is_integer(nth) and width?(pfx, width),
     do: %{pfx | bits: <<pfx.bits::bits, nth::size(width)>>}
@@ -900,26 +969,27 @@ defmodule Prefix do
       iex> new(<<10, 11, 12, 128>>, 32) |> format()
       "10.11.12.128"
 
-      iex> new(<<0xacdc::16, 0x1976::16>>, 128)
-      ...> |> format(width: 16, base: 16, ssep: ":")
+      iex> prefix = new(<<0xacdc::16, 0x1976::16>>, 128)
+      iex> format(prefix, width: 16, base: 16, ssep: ":")
       "ACDC:1976:0:0:0:0:0:0/32"
-
-      # similar, but grouping 4 fields, each of which is 4 bits wide
-      iex> new(<<0xacdc::16, 0x1976::16>>, 128)
-      ...> |> format(width: 4, base: 16, unit: 4, ssep: ":")
+      #
+      # similar, but grouping 4 fields, each 4 bits wide, into a single section
+      #
+      iex> format(prefix, width: 4, base: 16, unit: 4, ssep: ":")
       "ACDC:1976:0000:0000:0000:0000:0000:0000/32"
-
+      #
       # this time, omit the acutal prefix length
-      iex> new(<<0xacdc::16, 0x1976::16>>, 128)
-      ...> |> format(width: 16, base: 16, ssep: ":", mask: false)
+      #
+      iex> format(prefix, width: 16, base: 16, ssep: ":", mask: false)
       "ACDC:1976:0:0:0:0:0:0"
-
+      #
       # ptr for IPv6 using the nibble format:
       # - dot-separated reversal of all hex digits in the expanded address
-      iex> new(<<0xacdc::16, 0x1976::16>>, 128)
+      #
+      iex> prefix
       ...> |> format(width: 4, base: 16, mask: false, reverse: true)
       ...> |> String.downcase()
-      ...> |> (&"#{&1}.ip6.arpa.").()
+      ...> |> (fn x -> "#{x}.ip6.arpa." end).()
       "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.6.7.9.1.c.d.c.a.ip6.arpa."
 
       # turn off padding to get reverse zone ptr record
@@ -930,7 +1000,7 @@ defmodule Prefix do
 
 
   """
-  @spec format(t, list) :: String.t() | PrefixError.t()
+  @spec format(t, Keyword.t()) :: String.t() | PrefixError.t()
   def format(prefix, opts \\ [])
 
   def format(prefix, opts) when valid?(prefix) do
@@ -983,17 +1053,19 @@ defmodule Prefix do
       # sort prefix.bits size first, than on prefix.bits values
       iex> l = [new(<<10, 11>>, 32), new(<<10,10,10>>, 32), new(<<10,10>>, 32)]
       iex> Enum.sort(l, Prefix)
-      [ %Prefix{bits: <<10, 10, 10>>, maxlen: 32},
+      [
+        %Prefix{bits: <<10, 10, 10>>, maxlen: 32},
         %Prefix{bits: <<10, 10>>, maxlen: 32},
         %Prefix{bits: <<10, 11>>, maxlen: 32}
       ]
-
+      #
       # whereas regular sort does:
-      iex> l = [<<10, 11>>, <<10,10,10>>, <<10,10>>]
+      #
       iex> Enum.sort(l)
-      [ <<10, 10>>,
-        <<10, 10, 10>>,
-        <<10, 11>>
+      [
+        %Prefix{bits: <<10, 10>>, maxlen: 32},
+        %Prefix{bits: <<10, 10, 10>>, maxlen: 32},
+        %Prefix{bits: <<10, 11>>, maxlen: 32}
       ]
 
       # prefixes must have the same maxlen
