@@ -287,7 +287,7 @@ defmodule Prefix do
       0
 
   """
-  @spec bit(t, pos_integer) :: 0..1 | PrefixError.t()
+  @spec bit(t, pos_integer) :: 0 | 1 | PrefixError.t()
   def bit(prefix, position)
       when is_integer(position) and position >= bit_size(prefix.bits),
       do: 0
@@ -523,7 +523,7 @@ defmodule Prefix do
       %Prefix{bits: <<1, 2, 255, 255>>, maxlen: 32}
 
   """
-  @spec padr(t, 0..1) :: t | PrefixError.t()
+  @spec padr(t, 0 | 1) :: t | PrefixError.t()
   def padr(x, bit) when valid?(x), do: padr(x, bit, x.maxlen)
 
   @doc """
@@ -546,7 +546,7 @@ defmodule Prefix do
       %Prefix{bits: <<1, 2, 0, 0>>, maxlen: 32}
 
   """
-  @spec padr(t, 0..1, pos_integer) :: t | PrefixError.t()
+  @spec padr(t, 0 | 1, pos_integer) :: t | PrefixError.t()
   def padr(prefix, bit, n) when valid?(prefix) and is_integer(n) do
     bsize = bit_size(prefix.bits)
     nbits = min(n, prefix.maxlen - bsize)
@@ -583,7 +583,7 @@ defmodule Prefix do
       %Prefix{bits: <<255, 255, 1, 2>>, maxlen: 32}
 
   """
-  @spec padl(t, 0..1) :: t | PrefixError.t()
+  @spec padl(t, 0 | 1) :: t | PrefixError.t()
   def padl(x, bit) when valid?(x), do: padl(x, bit, x.maxlen)
 
   @doc """
@@ -598,7 +598,7 @@ defmodule Prefix do
       %Prefix{bits: <<0, 0, 255, 255>>, maxlen: 32}
 
   """
-  @spec padl(t, 0..1, pos_integer) :: t | PrefixError.t()
+  @spec padl(t, 0 | 1, pos_integer) :: t | PrefixError.t()
   def padl(prefix, bit, n) when valid?(prefix) and is_integer(n) do
     bsize = bit_size(prefix.bits)
     nbits = min(n, prefix.maxlen - bsize)
@@ -623,7 +623,7 @@ defmodule Prefix do
       %Prefix{bits: <<255, 255, 255>>, maxlen: 32}
 
   """
-  @spec bset(t, 0..1) :: t | PrefixError.t()
+  @spec bset(t, 0 | 1) :: t | PrefixError.t()
   def bset(prefix, bit \\ 0)
 
   def bset(prefix, bit) when valid?(prefix) do

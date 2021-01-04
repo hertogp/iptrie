@@ -1,6 +1,9 @@
 # Iptrie
 
-**TODO: Add description**
+A K,V-store for IPv4 and IPv6 addresses and/or prefixes.
+
+Use Iptrie to do longest prefix match lookup for ip addresses and networks.
+
 
 ## Installation
 
@@ -15,7 +18,5 @@ def deps do
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/iptrie](https://hexdocs.pm/iptrie).
+Repositiory is on [github](https://https://github.com/hertogp/iptrie).
 
