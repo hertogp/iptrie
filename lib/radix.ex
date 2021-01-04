@@ -72,15 +72,18 @@ defmodule Radix do
 
   Regular binaries work too:
 
-      iex> t = new([{"hello", "Sir"}, {"hellooo", "there"}])
-      iex> lpm(t, "helloo")
+      iex> t = new([{"hello", "Sir"}, {"hellooo", "there"}, {"nice", "not bad"}])
+      iex> lpm(t, "hello!")
       {"hello", "Sir"}
       #
       iex> lpm(t, "hellooooooo")
       {"hellooo", "there"}
       #
-      iex> lpm(t, "hello!")
-      {"hello", "Sir"}
+      iex> rpm(t, "hell")
+      [
+        {"hellooo", "there"},
+        {"hello", "Sir"}
+      ]
       #
       iex> lpm(t, "goodbye")
       nil
@@ -509,22 +512,22 @@ defmodule Radix do
   # TRAVERSALs
 
   @doc """
-  Return all `{k,v}`-pairs as a flat list, using inorder traversal.
+  Return all `{k,v}`-pairs as a flat list, using in-order traversal.
 
   ## Example
 
-      iex> elements = [
-      ...>  {<<1, 1>>, 16},
-      ...>  {<<1, 1, 0>>, 24},
-      ...>  {<<1, 1, 0, 0>>, 32},
-      ...>  {<<1, 1, 1, 1>>, 32}
-      ...> ]
-      iex> new(elements) |> to_list()
+      iex> tree = new([
+      ...>  {<<1, 1, 1, 0::1>>, "1.1.1.0/25"},
+      ...>  {<<1, 1, 1, 1::1>>, "1.1.1.128/25"},
+      ...>  {<<3>>, "3.0.0.0/8"},
+      ...>  {<<1, 1, 1>>, "1.1.1.0/24"}
+      ...>  ])
+      iex> to_list(tree)
       [
-        {<<1, 1, 0, 0>>, 32},
-        {<<1, 1, 0>>, 24},
-        {<<1, 1>>, 16},
-        {<<1, 1, 1, 1>>, 32},
+        {<<1, 1, 1, 0::1>>, "1.1.1.0/25"},
+        {<<1, 1, 1>>, "1.1.1.0/24"},
+        {<<1, 1, 1, 1::1>>, "1.1.1.128/25"},
+        {<<3>>, "3.0.0.0/8"}
       ]
 
 
@@ -533,28 +536,31 @@ defmodule Radix do
   def to_list(tree), do: to_list(tree, [])
 
   defp to_list(nil, acc), do: acc
-  defp to_list({_bit, l, r}, acc), do: to_list(l, acc) ++ to_list(r, [])
-  defp to_list(leaf, acc), do: leaf ++ acc
+  defp to_list({_bit, l, r}, acc), do: to_list(r, to_list(l, acc))
+  defp to_list(leaf, acc), do: acc ++ leaf
 
   @doc """
-  Execute a user supplied function on all `{k,v}`-pairs in the tree.
+  Executes *fun* on all `{k,v}`-pairs in the radix tree in a depth-first fashion.
 
-  # Example
+  *fun*'s signature is (`t:key/0`, `t:value/0`, `t:acc/0`) -> `t:acc/0`, where
+  the user supplies both *fun* and *acc*.
+
+  ## Example
 
       iex> t = new([
-      ...>  {<<1, 1>>, "1.1"},
-      ...>  {<<1, 1, 0>>, "1.1.0"},
-      ...>  {<<1, 1, 0, 0>>, "1.1.0.0"},
-      ...>  {<<1, 1, 1, 1>>, "1.1.1.1"}
+      ...>  {<<1, 1, 1, 0::1>>, "1.1.1.0/25"},
+      ...>  {<<1, 1, 1, 1::1>>, "1.1.1.128/25"},
+      ...>  {<<1, 1, 1>>, "1.1.1.0/24"},
+      ...>  {<<3>>, "3.0.0.0/8"},
       ...>  ])
       iex>
-      iex> f = fn _key, value, acc -> [value] ++ acc end
+      iex> f = fn _key, value, acc -> acc ++ [value] end
       iex>
       iex> exec(t, f, [])
-      ["1.1.1.1", "1.1", "1.1.0", "1.1.0.0"]
+      ["1.1.1.0/25", "1.1.1.0/24", "1.1.1.128/25", "3.0.0.0/8"]
 
   """
-  @spec exec(tree, (acc, key, value -> acc), acc) :: acc
+  @spec exec(tree, (key, value, acc -> acc), acc) :: acc
   def exec(tree, fun, acc)
   def exec(nil, _f, acc), do: acc
   def exec([], _f, acc), do: acc
@@ -562,8 +568,8 @@ defmodule Radix do
   def exec([{k, v} | tail], fun, acc), do: exec(tail, fun, fun.(k, v, acc))
 
   @doc """
-  Traverse the tree in `:inorder`, `:preorder` or `:postorder`, and call *fun*
-  on each radix tree node.
+  Execute *fun* on all nodes of the radix tree using either in-order (the
+  default), pre-order or post-order traversal.
 
   *fun* should have the signatures:
   -  (`t:acc/0`, `t:tree/0`) -> `t:acc/0`
@@ -586,34 +592,35 @@ defmodule Radix do
       ...>   (acc, leaf) -> Enum.map(leaf, fn {_k, v} -> v end) ++ acc
       ...> end
       iex>
-      iex> traverse([], f, t, :inorder)
+      iex> traverse(t, f, [])
       ["1.1.1.1", "1.1.0.0", "1.1.0", "1.1"]
 
   """
-  @spec traverse(acc, (acc, tree | leaf -> acc), tree | leaf, atom) :: acc
-  def traverse(acc, fun, tree, order \\ :inorder)
+  @spec traverse(tree, (acc, tree | leaf -> acc), acc, atom) :: acc
+  def traverse(tree, fun, acc, order \\ :inorder),
+    do: traversep(acc, fun, tree, order)
 
-  def traverse(acc, fun, {bit, l, r}, order) do
+  defp traversep(acc, fun, {bit, l, r}, order) do
     case order do
       :inorder ->
         acc
-        |> traverse(fun, l, order)
+        |> traversep(fun, l, order)
         |> fun.({bit, l, r})
-        |> traverse(fun, r, order)
+        |> traversep(fun, r, order)
 
       :preorder ->
         acc
         |> fun.({bit, l, r})
-        |> traverse(fun, l, order)
-        |> traverse(fun, r, order)
+        |> traversep(fun, l, order)
+        |> traversep(fun, r, order)
 
       :postorder ->
         acc
-        |> traverse(fun, l, order)
-        |> traverse(fun, r, order)
+        |> traversep(fun, l, order)
+        |> traversep(fun, r, order)
         |> fun.({bit, l, r})
     end
   end
 
-  def traverse(acc, fun, leaf, _order), do: fun.(acc, leaf)
+  defp traversep(acc, fun, leaf, _order), do: fun.(acc, leaf)
 end

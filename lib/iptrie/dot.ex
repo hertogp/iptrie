@@ -26,10 +26,13 @@ defmodule Iptrie.Dot do
   # - optionally graph payload instead of key's, perhaps via callback that
   #   takes a k,v-pair and produces a (short) string?
 
-  # DUMP nodes, accumulator is [ids, nodes, verts]
+  # DUMP
+  # The accumulator holds [ids, nodes, verts]
+  # The radix tree is traversed in post-order, so left/right children are
+  # processed before the internal node itself.
   # A leaf:
-  # - adds node to nodes (id = length of nodes)
-  # - adds id to ids
+  # - adds a node to nodes (id = length of nodes)
+  # - adds the node's id to ids
   # A node:
   # - adds node to nodes (id = length of nodes) -- if non-nil
   # - ads id or nil to ids
@@ -84,9 +87,7 @@ defmodule Iptrie.Dot do
   #  - perhaps an Iptrie with properties for drawing and using lpm match
   def dotify(tree, title) do
     [_ids, nodes, verts] =
-      Radix.traverse([[], [], []], fn n, x -> dump(n, x) end, tree, :postorder)
-
-    body = Enum.join(nodes) <> "\n" <> Enum.join(verts)
+      Radix.traverse(tree, fn n, x -> dump(n, x) end, [[], [], []], :postorder)
 
     """
     digraph G {
@@ -96,8 +97,9 @@ defmodule Iptrie.Dot do
       rankdir="TB";
       ranksep="0.5 equally";
 
+      #{Enum.join(nodes)}
 
-      #{body}
+      #{Enum.join(verts)}
     }
     """
   end
