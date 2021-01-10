@@ -93,9 +93,10 @@ defmodule Prefix.IP do
     charlist = String.to_charlist(prefix)
     {address, mask} = splitp(charlist, [])
 
-    case :inet.parse_address(address) do
-      {:error, _} -> error(:encode, prefix)
-      {:ok, digits} -> encode({digits, mask})
+    case {:inet.parse_address(address), mask} do
+      {{:error, _}, _} -> error(:encode, prefix)
+      {_, :error} -> error(:encode, prefix)
+      {{:ok, digits}, mask} -> encode({digits, mask})
     end
   end
 
@@ -121,26 +122,29 @@ defmodule Prefix.IP do
   def encode(x) when is_exception(x), do: x
   def encode(x), do: error(:encode, x)
 
-  # faster this way irt multiple func's w/ signatures
-  # crude length parser: '1.1.1.1/' is ok, '1.1.1.1/024' is also ok
-  defp splitp(cl, a) do
-    case cl do
+  # split a charlist with length into tuple w/ {'address', length}
+  # notes:
+  # - ugly code, but a tad faster than multiple func's w/ signatures
+  # - crude length "parser":
+  #   '1.1.1.1/024' -> {'1.1.1.1', 24}
+  defp splitp(charlist, acc) do
+    case charlist do
       [?/ | tail] ->
-        mask =
+        length =
           case tail do
             [y, z] -> (y - ?0) * 10 + z - ?0
             [z] -> z - ?0
             [x, y, z] -> (x - ?0) * 100 + (y - ?0) * 10 + z - ?0
-            _ -> error(:encode, tail)
+            _ -> :error
           end
 
-        {Enum.reverse(a), mask}
+        {Enum.reverse(acc), length}
 
       [x | tail] ->
-        splitp(tail, [x | a])
+        splitp(tail, [x | acc])
 
       [] ->
-        {Enum.reverse(a), nil}
+        {Enum.reverse(acc), nil}
     end
   end
 
