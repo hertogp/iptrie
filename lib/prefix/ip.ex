@@ -83,42 +83,27 @@ defmodule Prefix.IP do
       %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128}
 
       # exceptions are passed through
-      iex> decode("illegal") |> encode()
-      %PrefixError{id: :decode, detail: "illegal"}
-
+      iex> decode(%Prefix{bits: <<1,2,3,4,5>>, maxlen: 32}) |> encode()
+      %PrefixError{id: :digits, detail: {%Prefix{bits: <<1, 2, 3, 4, 5>>, maxlen: 32},8}}
   """
 
   @impl Prefix
   @spec encode(String.t() | address() | digits()) :: Prefix.t() | PrefixError.t()
   def encode(prefix) when is_binary(prefix) do
-    {addr, len} =
-      prefix
-      |> String.split("/", parts: 2)
-      |> case do
-        [addr, len] -> {addr, Integer.parse(len)}
-        [addr] -> {addr, :none}
-      end
+    charlist = String.to_charlist(prefix)
+    {address, mask} = splitp(charlist, [])
 
-    digits =
-      addr
-      |> String.to_charlist()
-      |> :inet.parse_address()
-      |> case do
-        {:error, _} -> :error
-        {:ok, digits} -> digits
-      end
-
-    case {digits, len} do
+    case :inet.parse_address(address) do
       {:error, _} -> error(:encode, prefix)
-      {_, :error} -> error(:encode, prefix)
-      {digits, :none} -> encode(digits)
-      {digits, {len, ""}} -> encode({digits, len})
-      _ -> error(:encode, prefix)
+      {:ok, digits} -> encode({digits, mask})
     end
   end
 
-  def encode(digits) when ip4?(digits), do: encode({digits, 32})
-  def encode(digits) when ip6?(digits), do: encode({digits, 128})
+  # only check tuple_size, since next encode call checks all digits
+  def encode({digits, nil}) when tuple_size(digits) == 4, do: encode({digits, 32})
+  def encode({digits, nil}) when tuple_size(digits) == 8, do: encode({digits, 128})
+  def encode(digits) when tuple_size(digits) == 4, do: encode({digits, 32})
+  def encode(digits) when tuple_size(digits) == 8, do: encode({digits, 128})
 
   def encode({digits = {a, b, c, d}, len}) when digits4?(digits, len) do
     <<bits::bitstring-size(len), _::bitstring>> = <<a::8, b::8, c::8, d::8>>
@@ -135,6 +120,29 @@ defmodule Prefix.IP do
 
   def encode(x) when is_exception(x), do: x
   def encode(x), do: error(:encode, x)
+
+  # faster this way irt multiple func's w/ signatures
+  # crude length parser: '1.1.1.1/' is ok, '1.1.1.1/024' is also ok
+  defp splitp(cl, a) do
+    case cl do
+      [?/ | tail] ->
+        mask =
+          case tail do
+            [y, z] -> (y - ?0) * 10 + z - ?0
+            [z] -> z - ?0
+            [x, y, z] -> (x - ?0) * 100 + (y - ?0) * 10 + z - ?0
+            _ -> error(:encode, tail)
+          end
+
+        {Enum.reverse(a), mask}
+
+      [x | tail] ->
+        splitp(tail, [x | a])
+
+      [] ->
+        {Enum.reverse(a), nil}
+    end
+  end
 
   # Decode
 
@@ -157,8 +165,8 @@ defmodule Prefix.IP do
       "1.1.1.1/24"
 
       # exceptions are passed through
-      iex> encode("illegal") |> decode()
-      %PrefixError{id: :encode, detail: "illegal"}
+      iex> encode("1.1.1.256") |> decode()
+      %PrefixError{id: :encode, detail: "1.1.1.256"}
 
   """
   @impl Prefix
@@ -191,6 +199,7 @@ defmodule Prefix.IP do
     if len < 128, do: "#{pfx}/#{len}", else: "#{pfx}"
   end
 
+  # note: exceptions may get nested, like a stacktrace of sorts
   def decode(x) when is_exception(x), do: x
   def decode(x), do: error(:decode, x)
 end
