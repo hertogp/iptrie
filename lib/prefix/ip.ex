@@ -72,15 +72,22 @@ defmodule Prefix.IP do
       iex> encode("1.1.1.1")
       %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
 
-      iex> encode({1,1,1,1})
+      iex> encode({1, 1, 1, 1})
+      %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
+
+      # valid Prefix structs are passed through
+      iex> encode({1,1,1,1}) |> encode()
       %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
 
       # host bits are lost in translation
       iex> encode("1.1.1.1/24")
       %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
 
-      iex> encode("acdc:1976::/32")
+      iex> encode("acdc:1976::abba/32")
       %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128}
+
+      iex> encode("acdc:1975::84.78.84.0")
+      %Prefix{bits: <<0xacdc::16, 0x1975::16, 0::64, ?T, ?N, ?T, 0>>, maxlen: 128}
 
       # exceptions are passed through
       iex> decode({1, 2, 3, 256}) |> encode()
@@ -119,6 +126,8 @@ defmodule Prefix.IP do
     %Prefix{bits: bits, maxlen: 128}
   end
 
+  # pass through any valid %Prefix struct
+  def encode(%Prefix{} = x) when Prefix.valid?(x), do: x
   def encode(x) when is_exception(x), do: x
   def encode(x), do: error(:encode, x)
 
@@ -168,6 +177,12 @@ defmodule Prefix.IP do
       iex> decode({{1, 1, 1, 1}, 24})
       "1.1.1.1/24"
 
+      # valid CIDR-strings are passed through, may without a full mask
+      iex> decode("1.1.1.1")
+      "1.1.1.1"
+      iex> decode("1.1.1.1/32")
+      "1.1.1.1"
+
       # exceptions are passed through
       iex> encode("1.1.1.256") |> decode()
       %PrefixError{id: :encode, detail: "1.1.1.256"}
@@ -201,6 +216,13 @@ defmodule Prefix.IP do
   def decode({digits, len}) when digits6?(digits, len) do
     pfx = :inet.ntoa(digits)
     if len < 128, do: "#{pfx}/#{len}", else: "#{pfx}"
+  end
+
+  # passthrough valid CIDR strings
+  def decode(prefix) when is_binary(prefix) do
+    prefix
+    |> encode()
+    |> decode()
   end
 
   # note: exceptions may get nested, like a stacktrace of sorts

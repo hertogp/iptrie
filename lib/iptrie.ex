@@ -52,7 +52,7 @@ defmodule Iptrie do
     |> decode()
   end
 
-  # Table
+  # Trie functions
 
   @doc """
   Create an new, empty Iptrie.
@@ -66,16 +66,16 @@ defmodule Iptrie do
   def new, do: %__MODULE__{root: Radix.new()}
 
   @doc """
-  Create a new Iptrie populated with the given prefix,value pair(s).
+  Create a new Iptrie populated with the given {prefix,value}-pairs.
 
   """
   def new(elements), do: new() |> set(elements)
 
-  # for convenience: add a list of [{k,v},...] to a tree
   @doc """
   Enter a single prefix-value pair or list thereof, into an iptrie.
 
   """
+  @spec set(t(), String.t(), any()) :: t()
   def set(tree, pfx, val) do
     case encode(pfx) do
       x when is_exception(x) -> raise x
@@ -88,12 +88,12 @@ defmodule Iptrie do
   end
 
   @doc """
-  Look for the longest matching prefix in an Iptrie.
+  Look for the longest matching *prefix* in an Iptrie.
 
   """
   @spec lookup(t(), String.t() | Prefix.t() | :inet.ip_address()) :: term
-  def lookup(%__MODULE__{} = tree, pfx) when is_binary(pfx),
-    do: lookup(tree, encode(pfx))
+  def lookup(%__MODULE__{} = tree, prefix) when is_binary(prefix),
+    do: lookup(tree, encode(prefix))
 
   def lookup(%__MODULE__{} = tree, x) when is_tuple(x),
     do: lookup(tree, encode(x))
@@ -106,7 +106,7 @@ defmodule Iptrie do
   def dot(tree, fname),
     do: Dot.write(tree, fname)
 
-  # IP prefixes
+  # IP functions
 
   @doc """
   Return the this-network address for given *prefix*.
@@ -280,11 +280,10 @@ defmodule Iptrie do
   end
 
   # TODO Table funcs
-  # o exec :: apply function to all nodes & leafs
   # o get :: get exact match
   # o less :: return all less specifics (option inclusive)
-  # o map :: apply function to all {k,v}-pairs
   # o more :: return all more specifics (option inclusive)
+  # o map :: apply function to all {k,v}-pairs
 
   # TODO Prefix funcs
   # o hosts_lazy :: return stream that returns hosts addresses
