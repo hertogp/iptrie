@@ -83,8 +83,8 @@ defmodule Prefix.IP do
       %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128}
 
       # exceptions are passed through
-      iex> decode(%Prefix{bits: <<1,2,3,4,5>>, maxlen: 32}) |> encode()
-      %PrefixError{id: :digits, detail: {%Prefix{bits: <<1, 2, 3, 4, 5>>, maxlen: 32},8}}
+      iex> decode({1, 2, 3, 256}) |> encode()
+      %PrefixError{id: :decode, detail: {1, 2, 3, 256}}
   """
 
   @impl Prefix
