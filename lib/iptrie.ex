@@ -45,7 +45,7 @@ defmodule Iptrie do
   defp unkey(<<@ip6, bits::bitstring>>),
     do: %Prefix{bits: bits, maxlen: 128}
 
-  # given to Dot to dump a Iptrie to graphviz file
+  # so Dot can dump a Iptrie to graphviz file
   def key_tostring(key) do
     key
     |> unkey()

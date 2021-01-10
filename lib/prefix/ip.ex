@@ -14,7 +14,7 @@ defmodule Prefix.IP do
   alias PrefixError
 
   @typedoc """
-  An :inet IPv4 or IPv6 address.
+  An `:inet` IPv4 or IPv6 address tuple.
 
   """
   @type address :: :inet.ip4_address() | :inet.ip6_address()
@@ -89,7 +89,7 @@ defmodule Prefix.IP do
   """
 
   @impl Prefix
-  @spec encode(String.t() | :inet.ip_address() | digits()) :: Prefix.t() | PrefixError.t()
+  @spec encode(String.t() | address() | digits()) :: Prefix.t() | PrefixError.t()
   def encode(prefix) when is_binary(prefix) do
     {addr, len} =
       prefix
@@ -162,7 +162,7 @@ defmodule Prefix.IP do
 
   """
   @impl Prefix
-  @spec decode(Prefix.t() | :inet.ip_address() | digits()) :: String.t() | PrefixError.t()
+  @spec decode(Prefix.t() | address() | digits()) :: String.t() | PrefixError.t()
   def decode(%Prefix{maxlen: 32} = prefix) do
     prefix
     |> Prefix.digits(8)
