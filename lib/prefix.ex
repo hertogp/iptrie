@@ -511,6 +511,8 @@ defmodule Prefix do
   """
   @spec padr(t) :: t | PrefixError.t()
   def padr(x) when valid?(x), do: padr(x, 0, x.maxlen)
+  def padr(x) when is_exception(x), do: x
+  def padr(x), do: error(:padr, x)
 
   @doc """
   Right pad the *prefix.bits* to its full length using either `0` or `1`-bits.
@@ -525,6 +527,8 @@ defmodule Prefix do
   """
   @spec padr(t, 0 | 1) :: t | PrefixError.t()
   def padr(x, bit) when valid?(x), do: padr(x, bit, x.maxlen)
+  def padr(x, _) when is_exception(x), do: x
+  def padr(x, y), do: error(:padr, {x, y})
 
   @doc """
   Right pad the *prefix.bits* with *n* bits of either `0` or `1`'s.
@@ -571,6 +575,8 @@ defmodule Prefix do
   """
   @spec padl(t) :: t | PrefixError.t()
   def padl(x) when valid?(x), do: padl(x, 0, x.maxlen)
+  def padl(x) when is_exception(x), do: x
+  def padl(x), do: error(:padl, x)
 
   @doc """
   Left pad the *prefix.bits* to its full length using either `0` or `1`-bits.
@@ -585,6 +591,8 @@ defmodule Prefix do
   """
   @spec padl(t, 0 | 1) :: t | PrefixError.t()
   def padl(x, bit) when valid?(x), do: padl(x, bit, x.maxlen)
+  def padl(x, _) when is_exception(x), do: x
+  def padl(x, y), do: error(:padl, {x, y})
 
   @doc """
   Left pad the *prefix.bits* with *n* bits of either `0` or `1`'s.

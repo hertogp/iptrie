@@ -17,7 +17,7 @@ defmodule Iptrie.Dot do
 
   defp decode(key) do
     key
-    |> Iptrie.key_tostring()
+    |> Iptrie.rdx_key_tostr()
   end
 
   # TODO:
