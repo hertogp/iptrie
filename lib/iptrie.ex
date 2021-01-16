@@ -156,24 +156,64 @@ defmodule Iptrie do
   def new(elements), do: new() |> set(elements)
 
   @doc """
+  Return the {key,val}-pair where key is an exact match for given *prefix*,
+  or a list of pairs for a list of prefixes.
+
+  ## Examples
+
+      iex> tree = new([{"1.1.1.0/30", "A"}, {"1.1.1.0/31", "B"}, {"1.1.1.0", "C"}])
+      iex> get(tree, "1.1.1.0/31")
+      {<<0, 128, 128, 128>>, "B"}
+      #
+      iex> get(tree, "1.1.1.0/30")
+      {<<0::1, 1, 1, 1, 0::6>>, "A"}
+      #
+      iex> get(tree, "1.1.1.0")
+      {<<0::1, 1, 1, 1, 0>>, "C"}
+
+      iex> new() |> get("2.2.2.2")
+      nil
+
+      iex> new() |> get("2.2.2.256")
+      %PrefixError{id: :encode, detail: "2.2.2.256"}
+
+      iex> tree = new([{"1.1.1.0/30", "A"}, {"1.1.1.0/31", "B"}, {"1.1.1.0", "C"}])
+      iex> get(tree, ["1.1.1.0/31", "1.1.1.0/30"])
+      [{<<0, 128, 128, 128>>, "B"}, {<<0::1, 1, 1, 1, 0::6>>, "A"}]
+
+  """
+  @spec get(t(), prefix()) :: pfxval() | PrefixError.t()
+  def get(%__MODULE__{} = tree, prefix) when is_binary(prefix) do
+    case encode(prefix) do
+      x when is_exception(x) -> x
+      x -> Radix.get(tree.root, key(x))
+    end
+  end
+
+  @spec get(t(), list(prefix())) :: list(pfxval() | PrefixError.t())
+  def get(%__MODULE__{} = tree, prefixes) when is_list(prefixes) do
+    Enum.map(prefixes, fn x -> get(tree, x) end)
+  end
+
+  @doc """
   Enter a single {prefix,value}-pair into an iptrie.
 
   This always uses an exact match for *prefix*, updating its *value* if it
-  exists.
+  exists.  Any errors are silently ignored as the tree is always returned.
 
   ## Examples
 
       iex> new() |> set("1.1.1.0/24", "A")
       %Iptrie{root: {0, [{<<0, 128, 128, 1::size(1)>>, "A"}], nil}}
 
-      iex> new() |> set("1.1.1.0/33", "?")
-      %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
+      iex> new() |> set("1.1.1.0/33", "illegal")
+      %Iptrie{root: {0, nil, nil}}
 
   """
   @spec set(t(), prefix(), any()) :: t() | PrefixError.t()
-  def set(tree, prefix, value) do
+  def set(%__MODULE__{} = tree, prefix, value) do
     case encode(prefix) do
-      x when is_exception(x) -> x
+      x when is_exception(x) -> tree
       x -> %{tree | root: Radix.set(tree.root, key(x), value)}
     end
   end
@@ -186,8 +226,28 @@ defmodule Iptrie do
 
   """
   @spec set(t(), list(pfxval())) :: t()
-  def set(tree, elements) do
+  def set(%__MODULE__{} = tree, elements) do
     Enum.reduce(elements, tree, fn {k, v}, t -> set(t, k, v) end)
+  end
+
+  @doc """
+  Delete a {key, value}-pair where key is an exact match for a given *prefix*,
+  or delete {key, value}-pairs for a list of prefixes.
+
+  ## Examples
+
+  """
+  @spec del(t(), prefix()) :: t()
+  def del(%__MODULE__{} = tree, prefix) when is_binary(prefix) do
+    case encode(prefix) do
+      x when is_exception(x) -> tree
+      x -> %{tree | root: Radix.del(tree.root, key(x))}
+    end
+  end
+
+  @spec del(t(), list(prefix())) :: t()
+  def del(%__MODULE__{} = tree, prefixes) when is_list(prefixes) do
+    Enum.reduce(prefixes, tree, fn pfx, t -> del(t, pfx) end)
   end
 
   @doc """
@@ -223,7 +283,141 @@ defmodule Iptrie do
 
   def lookup(_, _), do: nil
 
-  def dot(tree, fname),
+  @doc """
+  Return all {key, value}-pairs where given *prefix* is a prefix of the key.
+
+  This returns all subnets for given prefix, including itself if present.
+
+  ## Example
+
+      iex> tree = new([{"1.1.0.0/16", "A"}, {"1.1.1.0/24", "B"}, {"1.1.1.0/25", "C"}])
+      iex> subnets(tree, "1.1.0.0/16")
+      [
+        {<<0::1, 1, 1, 1, 0::1>>, "C"},
+        {<<0::1, 1, 1, 1>>, "B"},
+        {<<0::1, 1, 1>>, "A"}
+      ]
+      #
+      iex> subnets(tree, "1.1.1.0/24")
+      [
+        {<<0::1, 1, 1, 1, 0::1>>, "C"},
+        {<<0::1, 1, 1, 1>>, "B"}
+      ]
+      #
+      iex> subnets(tree, "1.1.1.0/25")
+      [
+        {<<0::1, 1, 1, 1, 0::1>>, "C"}
+      ]
+
+  """
+  @spec subnets(t(), prefix()) :: list(pfxval()) | PrefixError.t()
+  def subnets(tree, prefix) do
+    case encode(prefix) do
+      x when is_exception(x) -> x
+      x -> Radix.rpm(tree.root, key(x))
+    end
+  end
+
+  @doc """
+  Return all {key, value}-pairs whose key is a prefix of given *prefix*.
+
+  This returns all supernets including the given *prefix* if present or
+  a `PrefixError` if given *prefix* is invalid.
+
+  ## Example
+
+      iex> tree = new([{"1.1.0.0/16", "A"}, {"1.1.1.0/24", "B"}, {"1.1.1.0/25", "C"}])
+      iex> supernets(tree, "1.1.1.0")
+      [
+        {<<0::1, 1, 1, 1, 0::1>>, "C"},
+        {<<0::1, 1, 1, 1>>, "B"},
+        {<<0::1, 1, 1>>, "A"}
+      ]
+      #
+      iex> supernets(tree, "1.1.1.0/25")
+      [
+        {<<0::1, 1, 1, 1, 0::1>>, "C"},
+        {<<0::1, 1, 1, 1>>, "B"},
+        {<<0::1, 1, 1>>, "A"}
+      ]
+      #
+      iex> supernets(tree, "1.1.0.0/24")
+      [
+        {<<0::1, 1, 1>>, "A"}
+      ]
+
+  """
+  @spec supernets(t(), prefix()) :: list(pfxval()) | PrefixError.t()
+  def supernets(tree, prefix) do
+    case encode(prefix) do
+      x when is_exception(x) -> x
+      x -> Radix.apm(tree.root, key(x))
+    end
+  end
+
+  @doc """
+  Execute function *func* on all {key, value}-pairs in the Iptrie.
+
+  The leafs are visited in-order and function `func` takes a stored
+  {key,value}-pair and an accumulator of choice and returns the updated
+  accumulator.
+
+  # Examples
+
+  Convert an `t:Iptrie.t/0` to a map.
+
+      iex> tree = new([{"1.1.0.0/16", "A"}, {"1.1.1.0/24", "C"}, {"1.1.1.0/25", "B"}])
+      iex> m = map(tree, fn {k, v}, acc -> Map.put(acc, rdx_key_tostr(k), v) end, %{})
+      iex> map_size(m)
+      3
+      iex> m["1.1.0.0/16"]
+      "A"
+      iex> m["1.1.1.0/25"]
+      "B"
+      iex> m["1.1.1.0/24"]
+      "C"
+
+  Collect all values into a list.  The leafs will be visited in-order, so the
+  leaf in the left subtree is for "1.1.0.0/16" while the leaf in the right
+  subtree holds "1.1.1.0/25" and "1.1.1.0/24" (in that order)
+
+      iex> tree = new([{"1.1.0.0/16", "A"}, {"1.1.1.0/24", "C"}, {"1.1.1.0/25", "B"}])
+      iex> map(tree, fn {_k,v}, acc -> [v | acc] end, []) |> Enum.reverse()
+      ["A", "B", "C"]
+
+
+  """
+  @spec map(t(), (keyval(), any -> any), any) :: any
+  def map(%__MODULE__{} = tree, func, acc) when is_function(func) do
+    Radix.exec(tree.root, func, acc)
+  end
+
+  @doc """
+  Execute function *func* on all {key, value}-pairs in the Iptrie and collect
+  the results in a list.
+
+  ## Example
+
+      iex> tree = new([{"1.1.0.0/16", "A"}, {"1.1.1.0/24", "C"}, {"1.1.1.0/25", "B"}])
+      iex> map(tree, fn {_k,v} -> v end)
+      ["A", "B", "C"]
+
+  """
+  @spec map(t(), (keyval() -> any)) :: list()
+  def map(%__MODULE__{} = tree, func) when is_function(func) do
+    f = fn kv, acc -> [func.(kv) | acc] end
+
+    tree
+    |> map(f, [])
+    |> Enum.reverse()
+  end
+
+  @doc """
+  Dump an Iptrie to a graphviz dot file.  Returns `:ok` on success.
+
+  """
+  @spec dot(t(), binary) :: atom
+  def dot(%__MODULE__{} = tree, fname),
     do: Dot.write(tree, fname)
 
   # IP functions
@@ -353,6 +547,9 @@ defmodule Iptrie do
       iex> neighbor("1.1.1.0/25")
       "1.1.1.128/25"
 
+      iex> neighbor("1.1.1.128/25")
+      "1.1.1.0/25"
+
       iex> neighbor("1.1.1.0/33")
       %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
 
@@ -444,9 +641,6 @@ defmodule Iptrie do
   end
 
   # TODO Table funcs
-  # o get :: get exact match
-  # o less :: return all less specifics (option inclusive)
-  # o more :: return all more specifics (option inclusive)
   # o map :: apply function to all {k,v}-pairs
 
   # TODO Prefix funcs

@@ -543,7 +543,7 @@ defmodule Radix do
   Executes *fun* on all `{k,v}`-pairs in the radix tree in a depth-first fashion.
 
   *fun*'s signature is (`t:key/0`, `t:value/0`, `t:acc/0`) -> `t:acc/0`, where
-  the user supplies both *fun* and *acc*.
+  the caller supplies both *fun* and *acc*.
 
   ## Example
 
@@ -554,18 +554,18 @@ defmodule Radix do
       ...>  {<<3>>, "3.0.0.0/8"},
       ...>  ])
       iex>
-      iex> f = fn _key, value, acc -> acc ++ [value] end
+      iex> f = fn {_key, value}, acc -> acc ++ [value] end
       iex>
       iex> exec(t, f, [])
       ["1.1.1.0/25", "1.1.1.0/24", "1.1.1.128/25", "3.0.0.0/8"]
 
   """
-  @spec exec(tree, (key, value, acc -> acc), acc) :: acc
+  @spec exec(tree, ({key, value}, acc -> acc), acc) :: acc
   def exec(tree, fun, acc)
   def exec(nil, _f, acc), do: acc
   def exec([], _f, acc), do: acc
   def exec({_, l, r}, fun, acc), do: exec(r, fun, exec(l, fun, acc))
-  def exec([{k, v} | tail], fun, acc), do: exec(tail, fun, fun.(k, v, acc))
+  def exec([{k, v} | tail], fun, acc), do: exec(tail, fun, fun.({k, v}, acc))
 
   @doc """
   Execute *fun* on all nodes of the radix tree using either in-order (the
