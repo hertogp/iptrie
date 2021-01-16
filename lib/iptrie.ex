@@ -529,9 +529,15 @@ defmodule Iptrie do
   @doc """
   Return the list of host addresses for given *prefix*.
 
-  ## Example
+  ## Examples
 
       iex> hosts("1.1.1.0/30")
+      ["1.1.1.0", "1.1.1.1", "1.1.1.2", "1.1.1.3"]
+
+      iex> hosts({{1, 1, 1, 0}, 30})
+      ["1.1.1.0", "1.1.1.1", "1.1.1.2", "1.1.1.3"]
+
+      iex> hosts(%Prefix{bits: <<1, 1, 1, 0::6>>, maxlen: 32})
       ["1.1.1.0", "1.1.1.1", "1.1.1.2", "1.1.1.3"]
 
       iex> hosts("1.1.1.0/33")
@@ -551,16 +557,20 @@ defmodule Iptrie do
   @doc """
   Returns the mask for given prefix.
 
-  ## Example
-
-      iex> mask("1.1.1.0/24")
-      "255.255.255.0"
+  ## Examples
 
       iex> mask("1.1.1.0/22")
       "255.255.252.0"
 
+      iex> mask({{1, 1, 1, 0}, 22})
+      "255.255.252.0"
+
+      iex> mask(%Prefix{bits: <<1, 1, 1::6>>, maxlen: 32})
+      "255.255.252.0"
+
       iex> mask("1.1.1.256/24")
       %PrefixError{id: :encode, detail: "1.1.1.256/24"}
+
   """
   @spec mask(prefix()) :: String.t() | PrefixError.t()
   def mask(prefix) do
@@ -576,11 +586,17 @@ defmodule Iptrie do
 
   ## Example
 
-      iex> inv_mask("1.1.1.0/24")
-      "0.0.0.255"
-
       iex> inv_mask("1.1.1.0/23")
       "0.0.1.255"
+
+      iex> inv_mask({{1, 1, 1, 0}, 23})
+      "0.0.1.255"
+
+      iex> inv_mask(%Prefix{bits: <<1, 1, 1::7>>, maxlen: 32})
+      "0.0.1.255"
+
+      iex> inv_mask("1.1.1.0/33")
+      %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
 
   """
   @spec inv_mask(prefix()) :: String.t() | PrefixError.t()
@@ -601,6 +617,15 @@ defmodule Iptrie do
       "1.1.1.128/25"
 
       iex> neighbor("1.1.1.128/25")
+      "1.1.1.0/25"
+
+      iex> neighbor({{1, 1, 1, 128}, 25})
+      "1.1.1.0/25"
+
+      iex> neighbor({1, 1, 1, 1})
+      "1.1.1.0"
+
+      iex> neighbor(%Prefix{bits: <<1, 1, 1, 1::1>>, maxlen: 32})
       "1.1.1.0/25"
 
       iex> neighbor("1.1.1.0/33")
@@ -653,6 +678,15 @@ defmodule Iptrie do
       iex> jump("255.255.255.255", 1)
       "0.0.0.0"
 
+      iex> jump({{255, 255, 255, 255}, 32}, 1)
+      "0.0.0.0"
+
+      iex> jump({255, 255, 255, 255}, 1)
+      "0.0.0.0"
+
+      iex> jump(%Prefix{bits: <<255, 255, 255, 255>>, maxlen: 32}, 1)
+      "0.0.0.0"
+
       # invalid prefix yields a PrefixError struct
       iex> jump("1.1.1.0/33", 1)
       %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
@@ -679,6 +713,12 @@ defmodule Iptrie do
       iex> host("1.1.1.0/24", 256)
       "1.1.1.0"
 
+      iex> host({{1, 1, 1, 0}, 24}, 128)
+      "1.1.1.128"
+
+      iex> host(%Prefix{bits: <<1, 1, 1>>, maxlen:  32}, 128)
+      "1.1.1.128"
+
       iex> host("1.1.1.0/33", 1)
       %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
 
@@ -698,6 +738,18 @@ defmodule Iptrie do
 
       iex> numhosts("acdc:1976::/32")
       79228162514264337593543950336
+
+      iex> numhosts("1.1.1.0/23")
+      512
+
+      iex> numhosts({{1, 1, 1, 0}, 23})
+      512
+
+      iex> numhosts(%Prefix{bits: <<1, 1, 1::7>>, maxlen: 32})
+      512
+
+      iex> numhosts({1, 1, 1, 1})
+      1
 
       iex> numhosts("1.1.1.0/33")
       %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
