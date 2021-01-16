@@ -254,20 +254,22 @@ defmodule Iptrie do
   Delete a {key, value}-pair where key is an exact match for a given *prefix*,
   or delete {key, value}-pairs for a list of prefixes.
 
+  If there is no match for given *prefix* it is silently ignored, as are any
+  errors in encoding *prefix*.
+
   ## Example
 
       iex> t = new([{"1.1.1.0/24", "A"}, {"1.1.1.0/25", "A1"}])
       %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"},
                          {<<0, 128, 128, 1::size(1)>>, "A"}],
                         nil}}
+      #
       iex> del(t, "1.1.1.0/24")
       %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"}], nil}}
       #
-      # same as
       iex> del(t, {{1, 1, 1, 0}, 24})
       %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"}], nil}}
       #
-      # same as
       iex> del(t, %Prefix{bits: <<1, 1, 1>>, maxlen: 32})
       %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"}], nil}}
 
@@ -289,6 +291,8 @@ defmodule Iptrie do
   @doc """
   Return the `t:keyval/0`-pair, whose key represents the longest possible
   prefix for the given search *prefix* or `nil` if nothing matched.
+
+  Silently ignores any errors when encoding given *prefix* by returning nil.
 
   ## Example
 
@@ -353,8 +357,6 @@ defmodule Iptrie do
       # same as
       iex> subnets(tree, %Prefix{bits: <<1, 1, 1, 0::1>>, maxlen: 32})
       [{<<0::1, 1, 1, 1, 0::1>>, "C"}]
-
-
 
   """
   @spec subnets(t(), prefix()) :: list(pfxval()) | PrefixError.t()
