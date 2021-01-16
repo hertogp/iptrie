@@ -213,31 +213,35 @@ defmodule Iptrie do
 
   ## Examples
 
-      iex> new() |> set("1.1.1.0/24", "A")
+      iex> new() |> set({"1.1.1.0/24", "A"})
       %Iptrie{root: {0, [{<<0, 128, 128, 1::size(1)>>, "A"}], nil}}
 
-      iex> new() |> set("1.1.1.0/33", "illegal")
+      iex> elements = [
+      ...>  {"1.1.1.0/24", "A"},
+      ...>  {{{1, 1, 2, 0}, 24}, "B"},
+      ...>  {%Prefix{bits: <<1, 1, 3>>, maxlen: 32}, "C"}]
+      iex>
+      iex> new() |> set(elements)
+      %Iptrie{root: {0, {23, [{<<0, 128, 128, 1::size(1)>>, "A"}],
+                             {24, [{<<0, 128, 129, 0::size(1)>>, "B"}], 
+                                  [{<<0, 128, 129, 1::size(1)>>, "C"}]}},
+                         nil}}
+
+      iex> new() |> set({"1.1.1.0/33", "illegal"})
       %Iptrie{root: {0, nil, nil}}
 
   """
-  @spec set(t(), prefix(), any()) :: t() | PrefixError.t()
-  def set(%__MODULE__{} = tree, prefix, value) do
+  @spec set(t(), list(pfxval())) :: t()
+  def set(%__MODULE__{} = tree, elements) when is_list(elements) do
+    Enum.reduce(elements, tree, fn kv, t -> set(t, kv) end)
+  end
+
+  @spec set(t(), {prefix(), any()}) :: t() | PrefixError.t()
+  def set(%__MODULE__{} = tree, {prefix, value}) do
     case encode(prefix) do
       x when is_exception(x) -> tree
       x -> %{tree | root: Radix.set(tree.root, key(x), value)}
     end
-  end
-
-  @doc """
-  Enter a list of {prefix,value}-pairs into an Iptrie.
-
-  This always uses an exact match for *prefix*, updating its *value* if it
-  exists.
-
-  """
-  @spec set(t(), list(pfxval())) :: t()
-  def set(%__MODULE__{} = tree, elements) do
-    Enum.reduce(elements, tree, fn {k, v}, t -> set(t, k, v) end)
   end
 
   @doc """
