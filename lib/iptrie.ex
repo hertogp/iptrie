@@ -171,6 +171,15 @@ defmodule Iptrie do
       #
       iex> get(tree, "1.1.1.0")
       {<<0::1, 1, 1, 1, 0>>, "C"}
+      #
+      iex> get(tree, {1, 1, 1, 0})
+      {<<0::1, 1, 1, 1, 0>>, "C"}
+      #
+      iex> get(tree, {{1, 1, 1, 0}, 31})
+      {<<0, 128, 128, 128>>, "B"}
+      #
+      iex> get(tree, %Prefix{bits: <<1, 1, 1, 0::7>>, maxlen: 32})
+      {<<0, 128, 128, 128>>, "B"}
 
       iex> new() |> get("2.2.2.2")
       nil
@@ -183,17 +192,17 @@ defmodule Iptrie do
       [{<<0, 128, 128, 128>>, "B"}, {<<0::1, 1, 1, 1, 0::6>>, "A"}]
 
   """
+  @spec get(t(), list(prefix())) :: list(pfxval() | PrefixError.t())
+  def get(%__MODULE__{} = tree, prefixes) when is_list(prefixes) do
+    Enum.map(prefixes, fn x -> get(tree, x) end)
+  end
+
   @spec get(t(), prefix()) :: pfxval() | PrefixError.t()
-  def get(%__MODULE__{} = tree, prefix) when is_binary(prefix) do
+  def get(%__MODULE__{} = tree, prefix) do
     case encode(prefix) do
       x when is_exception(x) -> x
       x -> Radix.get(tree.root, key(x))
     end
-  end
-
-  @spec get(t(), list(prefix())) :: list(pfxval() | PrefixError.t())
-  def get(%__MODULE__{} = tree, prefixes) when is_list(prefixes) do
-    Enum.map(prefixes, fn x -> get(tree, x) end)
   end
 
   @doc """
@@ -266,10 +275,15 @@ defmodule Iptrie do
   ## Example
 
       iex> t = new([{"1.1.1.0/24", "A"}, {"1.1.1.0/25", "A1"}])
-      iex> keyval = lookup(t, "1.1.1.127")
-      iex> elem(keyval, 1)
+      iex> lookup(t, "1.1.1.127") |> elem(1)
       "A1"
-      iex> rdx_key_tostr(elem(keyval, 0))
+      iex> lookup(t, {1, 1, 1, 127}) |> elem(1)
+      "A1"
+      iex> lookup(t, {{1, 1, 1, 127}, 32}) |> elem(1)
+      "A1"
+      iex> lookup(t, %Prefix{bits: <<1, 1, 1, 127>>, maxlen: 32}) |> elem(1)
+      "A1"
+      iex> lookup(t, "1.1.1.127") |> elem(0) |> rdx_key_tostr()
       "1.1.1.0/25"
       #
       iex> lookup(t, "2.2.2.2")
