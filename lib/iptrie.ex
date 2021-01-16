@@ -251,21 +251,29 @@ defmodule Iptrie do
                          {<<0, 128, 128, 1::size(1)>>, "A"}],
                         nil}}
       iex> del(t, "1.1.1.0/24")
-      %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"}],
-                        nil}}
+      %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"}], nil}}
+      #
+      # same as
+      iex> del(t, {{1, 1, 1, 0}, 24})
+      %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"}], nil}}
+      #
+      # same as
+      iex> del(t, %Prefix{bits: <<1, 1, 1>>, maxlen: 32})
+      %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"}], nil}}
+
 
   """
+  @spec del(t(), list(prefix())) :: t()
+  def del(%__MODULE__{} = tree, prefixes) when is_list(prefixes) do
+    Enum.reduce(prefixes, tree, fn pfx, t -> del(t, pfx) end)
+  end
+
   @spec del(t(), prefix()) :: t()
-  def del(%__MODULE__{} = tree, prefix) when is_binary(prefix) do
+  def del(%__MODULE__{} = tree, prefix) do
     case encode(prefix) do
       x when is_exception(x) -> tree
       x -> %{tree | root: Radix.del(tree.root, key(x))}
     end
-  end
-
-  @spec del(t(), list(prefix())) :: t()
-  def del(%__MODULE__{} = tree, prefixes) when is_list(prefixes) do
-    Enum.reduce(prefixes, tree, fn pfx, t -> del(t, pfx) end)
   end
 
   @doc """
