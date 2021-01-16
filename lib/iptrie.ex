@@ -326,9 +326,17 @@ defmodule Iptrie do
       ]
       #
       iex> subnets(tree, "1.1.1.0/25")
-      [
-        {<<0::1, 1, 1, 1, 0::1>>, "C"}
-      ]
+      [{<<0::1, 1, 1, 1, 0::1>>, "C"}]
+      #
+      # same as
+      iex> subnets(tree, {{1,1,1,0}, 25})
+      [{<<0::1, 1, 1, 1, 0::1>>, "C"}]
+      #
+      # same as
+      iex> subnets(tree, %Prefix{bits: <<1, 1, 1, 0::1>>, maxlen: 32})
+      [{<<0::1, 1, 1, 1, 0::1>>, "C"}]
+
+
 
   """
   @spec subnets(t(), prefix()) :: list(pfxval()) | PrefixError.t()
