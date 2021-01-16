@@ -19,7 +19,8 @@ defmodule RadixError do
     |> (&"#{x.id}: args (#{&1})").()
   end
 
-  def message(x), do: "#{x.id}: #{inspect(x.detail)}"
+  def message(x),
+    do: "#{x.id}: #{inspect(x.detail)}"
 end
 
 # defmodule Radix.Leaf do
@@ -146,7 +147,8 @@ defmodule Radix do
   # - extract the value of a bit in a key
   # - bits beyond the key-length are considered `0`
   @spec bit(key, bitpos) :: 0 | 1
-  defp bit(key, pos) when pos > bit_size(key) - 1, do: 0
+  defp bit(key, pos) when pos > bit_size(key) - 1,
+    do: 0
 
   defp bit(key, pos) do
     <<_::size(pos), bit::1, _::bitstring>> = key
@@ -163,7 +165,8 @@ defmodule Radix do
     end
   end
 
-  defp leaf(leaf, _key), do: leaf
+  defp leaf(leaf, _key),
+    do: leaf
 
   # action to take given a new, candidate key and a leaf
   #  :take   if the leaf is nil and thus free
@@ -171,7 +174,8 @@ defmodule Radix do
   #  :add    if the candidate shares the leaf's common prefix
   #  :split  if the candidate does not share the leaf's common prefix
   @spec action(leaf, key) :: :take | :update | :add | :split
-  defp action(nil, _key), do: :take
+  defp action(nil, _key),
+    do: :take
 
   defp action([{k, _v} | _tail] = leaf, key) do
     pad1 = max(0, bit_size(key) - bit_size(k))
@@ -185,7 +189,8 @@ defmodule Radix do
 
   # Say whether `k` is a prefix of `key`
   @spec is_prefix?(key, key) :: boolean
-  defp is_prefix?(k, key) when bit_size(k) > bit_size(key), do: false
+  defp is_prefix?(k, key) when bit_size(k) > bit_size(key),
+    do: false
 
   defp is_prefix?(k, key) do
     len = bit_size(k)
@@ -259,7 +264,8 @@ defmodule Radix do
   end
 
   # keep pos if outside both keys
-  defp diffkey(_key1, _key2, pos), do: pos
+  defp diffkey(_key1, _key2, pos),
+    do: pos
 
   # get key's position in the tree: {bitpos, match-type}
   @spec position(tree, key) :: bitpos
@@ -282,7 +288,8 @@ defmodule Radix do
 
   """
   @spec new :: tree
-  def new, do: @empty
+  def new,
+    do: @empty
 
   @doc """
   Return a new radix tree, initialized using given list of `{k, v}`-pairs.
@@ -359,7 +366,8 @@ defmodule Radix do
 
   """
   @spec set(tree, key, value) :: tree
-  def set(tree, key, value), do: put(tree, position(tree, key), key, value)
+  def set(tree, key, value),
+    do: put(tree, position(tree, key), key, value)
 
   @doc """
   Delete the `{k, v}`-pair where `k` is equal to *key*.
@@ -394,7 +402,8 @@ defmodule Radix do
   end
 
   # key wasn't in the tree
-  def del(nil, _key), do: nil
+  def del(nil, _key),
+    do: nil
 
   # key leads to leaf
   def del(leaf, key) do

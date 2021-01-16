@@ -5,12 +5,13 @@ defmodule Iptrie do
 
   ## Examples
 
-      iex> elms = [{"1.1.1.0/24", 24}, {"3.0.0.0/8", 8},
+      iex> elements = [{"1.1.1.0/24", 24}, {"3.0.0.0/8", 8},
       ...>  {"1.1.1.0/25", "lower"}, {"1.1.1.128/25", "upper"},
       ...>  {"acdc:1975::", "T.N.T"}, {"acdc:1976::", "High Voltage"},
       ...>  {"abba:1975::", "abba"}, {"abba:1976::", "Arrival"}]
-      iex> ipt = new(elms)
-      iex> Iptrie.Dot.write(ipt, "doc/img/example.dot", "example")
+      iex> ipt = new(elements)
+      iex> Iptrie.Dot.write(ipt, "./doc/img/example.dot", "Iptrie")
+      :ok
 
   # ![example](img/example.dot.png)
 
@@ -234,7 +235,15 @@ defmodule Iptrie do
   Delete a {key, value}-pair where key is an exact match for a given *prefix*,
   or delete {key, value}-pairs for a list of prefixes.
 
-  ## Examples
+  ## Example
+
+      iex> t = new([{"1.1.1.0/24", "A"}, {"1.1.1.0/25", "A1"}])
+      %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"},
+                         {<<0, 128, 128, 1::size(1)>>, "A"}],
+                        nil}}
+      iex> del(t, "1.1.1.0/24")
+      %Iptrie{root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"}],
+                        nil}}
 
   """
   @spec del(t(), prefix()) :: t()
@@ -640,9 +649,8 @@ defmodule Iptrie do
     |> size()
   end
 
-  # TODO Table funcs
-  # o map :: apply function to all {k,v}-pairs
-
-  # TODO Prefix funcs
+  # TODO
   # o hosts_lazy :: return stream that returns hosts addresses
+  # o map_lazy?
+  # o Enumerable for Iptrie?
 end
