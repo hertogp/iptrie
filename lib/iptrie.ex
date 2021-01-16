@@ -581,9 +581,25 @@ defmodule Iptrie do
 
   ## Examples
 
+      iex> jump("1.1.1.0/24", 0)
+      "1.1.1.0/24"
+
       iex> jump("1.1.1.0/24", 1)
       "1.1.2.0/24"
 
+      iex> jump("1.1.1.0/24", 256)
+      "1.2.1.0/24"
+
+      iex> jump("1.1.1.0/24", 256*256)
+      "2.1.1.0/24"
+
+      iex> jump("1.1.1.0/24", 256*256*256)
+      "1.1.1.0/24"
+
+      iex> jump("1.1.1.0/24", 1)
+      "1.1.2.0/24"
+
+      # other examples of wrapping around
       iex> jump("1.1.1.0/30", 64)
       "1.1.2.0/30"
 
@@ -593,6 +609,7 @@ defmodule Iptrie do
       iex> jump("255.255.255.255", 1)
       "0.0.0.0"
 
+      # invalid prefix yields a PrefixError struct
       iex> jump("1.1.1.0/33", 1)
       %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
 
