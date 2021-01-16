@@ -140,18 +140,24 @@ defmodule Iptrie do
   def new, do: %__MODULE__{root: Radix.new()}
 
   @doc """
-  Create a new Iptrie populated with the given {prefix,value}-pairs.
+  Create a new Iptrie populated with the given {`t:prefix/0`,value}-pairs.
 
   ## Example
 
-      iex> new([{"1.1.1.0/24", "A"}, {"1.1.1.0/25", "A1"}])
-      %Iptrie{
-        root: {0, [{<<0, 128, 128, 2::size(2)>>, "A1"},
-                   {<<0, 128, 128, 1::size(1)>>, "A"}
-                  ],
-                  nil
-              }
+      iex> elements = [
+      ...> {"1.1.1.0/24", "A"},
+      ...> {{{1, 1, 1, 0}, 25}, "A1"},
+      ...> {%Prefix{bits: <<1, 1, 1, 1::1>>, maxlen: 32}, "A2"},
+      ...> {{{44252, 6517, 0, 0, 0, 0, 0, 0}, 32}, "TNT"} ]
+      iex>
+      iex> new(elements)
+      %Iptrie{root: {0,
+                      {25, [{<<0::1, 1, 1, 1, 0::1>>, "A1"}, {<<0::1, 1, 1, 1>>, "A"}],
+                      [{<<0::1, 1, 1, 1, 1::1>>, "A2"}]},
+                      [{<<1::1, 0xACDC::16, 0x1975::16>>, "TNT"}]
+                    }
       }
+
   """
   @spec new(list(pfxval())) :: t()
   def new(elements), do: new() |> set(elements)
@@ -454,7 +460,7 @@ defmodule Iptrie do
   end
 
   @doc """
-  Dump an Iptrie to a graphviz dot file.  Returns `:ok` on success.
+  Dump an Iptrie to a simple graphviz dot file.  Returns `:ok` on success.
 
   """
   @spec dot(t(), binary) :: atom
@@ -508,6 +514,9 @@ defmodule Iptrie do
       iex> broadcast({1, 1, 1, 1})
       "1.1.1.1"
 
+      iex> broadcast("1.1.1.256")
+      %PrefixError{id: :encode, detail: "1.1.1.256"}
+
   """
   @spec broadcast(prefix()) :: String.t() | PrefixError.t()
   def broadcast(prefix) do
@@ -549,6 +558,9 @@ defmodule Iptrie do
 
       iex> mask("1.1.1.0/22")
       "255.255.252.0"
+
+      iex> mask("1.1.1.256/24")
+      %PrefixError{id: :encode, detail: "1.1.1.256/24"}
   """
   @spec mask(prefix()) :: String.t() | PrefixError.t()
   def mask(prefix) do
