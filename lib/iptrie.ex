@@ -295,14 +295,12 @@ defmodule Iptrie do
 
   """
   @spec lookup(t(), prefix()) :: term
-  def lookup(%__MODULE__{} = tree, prefix) when is_binary(prefix),
-    do: lookup(tree, encode(prefix))
-
-  def lookup(%__MODULE__{} = tree, x) when is_tuple(x),
-    do: lookup(tree, encode(x))
-
-  def lookup(%__MODULE__{} = tree, %Prefix{} = x),
-    do: Radix.lpm(tree.root, key(x))
+  def lookup(%__MODULE__{} = tree, prefix) do
+    case encode(prefix) do
+      x when is_exception(x) -> nil
+      x -> Radix.lpm(tree.root, key(x))
+    end
+  end
 
   def lookup(_, _), do: nil
 
