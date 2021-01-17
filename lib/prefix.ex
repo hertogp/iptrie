@@ -376,7 +376,10 @@ defmodule Prefix do
   `maxlen` bits wide.  Empty prefixes evaluate to `0`, since all 'missing'
   bits are taken to be zero (even is `maxlen` is 0-bits).
 
-  ## Example
+  Probably only useful in combination with `Prefix.bitfield` to extract
+  bitfields from a prefix and cast those fields to integers.
+
+  ## Examples
 
       iex> %Prefix{bits: <<255, 255>>, maxlen: 16} |> cast_int()
       65535
