@@ -3,7 +3,7 @@ defmodule Iptrie do
   A Key,Value-store for IPv4 and IPv6 networks or addresses with
   longest prefix matching.
 
-  ## Examples
+  ## Example
 
       iex> elements = [{"1.1.1.0/24", 24}, {"3.0.0.0/8", 8},
       ...>  {"1.1.1.0/25", "lower"}, {"1.1.1.128/25", "upper"},
@@ -13,7 +13,7 @@ defmodule Iptrie do
       iex> Iptrie.Dot.write(ipt, "./doc/img/example.dot", "Iptrie")
       :ok
 
-  # ![example](img/example.dot.png)
+  ![example](img/example.dot.png)
 
   """
   import Prefix
@@ -297,6 +297,8 @@ defmodule Iptrie do
   ## Example
 
       iex> t = new([{"1.1.1.0/24", "A"}, {"1.1.1.0/25", "A1"}])
+      iex> lookup(t, "1.1.1.127")
+      {<<0::1, 1, 1, 1, 0::1>>, "A1"}
       iex> lookup(t, "1.1.1.127") |> elem(1)
       "A1"
       iex> lookup(t, {1, 1, 1, 127}) |> elem(1)
@@ -394,6 +396,8 @@ defmodule Iptrie do
       [
         {<<0::1, 1, 1>>, "A"}
       ]
+      iex> supernets(tree, "2.2.2.2")
+      []
 
   """
   @spec supernets(t(), prefix()) :: list(pfxval()) | PrefixError.t()
