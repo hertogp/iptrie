@@ -229,7 +229,7 @@ defmodule Prefix do
 
   # cast a series of bits to a number, width bits wide.
   # - used for the binary ops on prefixes
-  defp cast_intp(bits, width) do
+  defp castp(bits, width) do
     bsize = bit_size(bits)
     <<x::size(bsize)>> = bits
     x <<< (width - bsize)
@@ -305,104 +305,109 @@ defmodule Prefix do
   def bit(x, y), do: error(:bit, {x, y})
 
   @doc """
-  Extract a series of bits as its own `Prefix`.
+  Cut out a series of bits and turn it into its own `Prefix`.
 
   The given *prefix* is padded right with `0`-bits and after extraction, the
-  resulting prefix will have its `maxlen` set to the number of bits extracted.
+  resulting prefix will have its `maxlen` set to the number of bits extracted
+  since the bits represent a construct of their own (e.g. a number or flags)
+  within the overall *prefix*.
 
   ## Examples
 
   As per example on
   [wikipedia](https://en.wikipedia.org/wiki/Teredo_tunneling#IPv6_addressing)
-  for an IPv6 address `2001:0000:4136:e378:8000:63bf:3fff:fdd2` that refers to a
-  Teredo client
+  for an IPv6 address `2001:0000:4136:e378:8000:63bf:3fff:fdd2` that refers to
+  a Teredo client:
 
       iex> teredo = new(<<0x2001::16, 0::16, 0x4136::16, 0xe378::16,
       ...>  0x8000::16, 0x63bf::16, 0x3fff::16, 0xfdd2::16>>, 128)
       iex>
       iex> # client
-      iex> bitfield(teredo, 96, 32) |> bnot()
+      iex> cut(teredo, 96, 32) |> bnot()
       %Prefix{bits: <<192, 0, 2, 45>>, maxlen: 32}
       iex>
-      iex> bitfield(teredo, -1, -32) |> bnot()
+      iex> # same as:
+      iex> cut(teredo, -1, -32) |> bnot()
       %Prefix{bits: <<192, 0, 2, 45>>, maxlen: 32}
       iex>
       iex> # udp port
-      iex> bitfield(teredo, 80, 16) |> bnot() |> cast_int()
+      iex> cut(teredo, 80, 16) |> bnot() |> cast()
       40000
       iex>
       iex> # teredo server
-      iex> bitfield(teredo, 32, 32)
+      iex> cut(teredo, 32, 32)
       %Prefix{bits: <<65, 54, 227, 120>>, maxlen: 32}
       iex>
       iex> # flags
-      iex> bitfield(teredo, 64, 16) |> digits(1) |> elem(0)
+      iex> cut(teredo, 64, 16) |> digits(1) |> elem(0)
       {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
   "Missing" bits are considered to be zero.
 
       # extract 2nd and 3rd byte:
-      iex> %Prefix{bits: <<255, 255>>, maxlen: 32} |> bitfield(8, 16)
+      iex> %Prefix{bits: <<255, 255>>, maxlen: 32} |> cut(8, 16)
       %Prefix{bits: <<255, 0>>, maxlen: 16}
 
   Extraction must stay within `maxlen` of given *prefix*.
 
       # cannot exceed boundaries though:
-      iex> %Prefix{bits: <<255, 255>>, maxlen: 32} |> bitfield(8, 32)
-      %PrefixError{id: :bitfield,
+      iex> %Prefix{bits: <<255, 255>>, maxlen: 32} |> cut(8, 32)
+      %PrefixError{id: :cut,
                     detail: {%Prefix{bits: <<255, 255>>, maxlen: 32}, 8, 32}}
 
   """
-  @spec bitfield(t(), integer, integer) :: t() | PrefixError.t()
-  def bitfield(prefix, pos, length)
+  @spec cut(t(), integer, integer) :: t() | PrefixError.t()
+  def cut(prefix, start, length)
 
-  def bitfield(%Prefix{} = x, pos, len) when pos < 0 do
-    bitfield(x, x.maxlen + 1 + pos + len, -1 * len)
+  def cut(%Prefix{} = x, pos, len) when pos < 0 and len <= 0 do
+    cut(x, x.maxlen + 1 + pos + len, -1 * len)
   end
 
-  def bitfield(%Prefix{} = x, pos, len) when valid?(x) and pos + len <= x.maxlen do
+  def cut(%Prefix{} = x, pos, len)
+      when valid?(x) and -1 < pos and pos < x.maxlen and pos + len <= x.maxlen and len >= 0 do
     x = padr(x)
     <<_::size(pos), bits::bitstring-size(len), _::bitstring>> = x.bits
     %Prefix{bits: bits, maxlen: len}
   end
 
-  def bitfield(x, _, _) when is_exception(x), do: x
-  def bitfield(x, p, l), do: error(:bitfield, {x, p, l})
+  def cut(x, _, _) when is_exception(x), do: x
+  def cut(x, p, l), do: error(:cut, {x, p, l})
 
   @doc """
   Cast a prefix to an integer.
 
-  After right padding the prefix, the bits are interpreted as a number of
-  `maxlen` bits wide.  Empty prefixes evaluate to `0`, since all 'missing'
-  bits are taken to be zero (even is `maxlen` is 0-bits).
+  After right padding the given *prefix*, the bits are interpreted as a number
+  of `maxlen` bits wide.  Empty prefixes evaluate to `0`, since all 'missing'
+  bits are taken to be zero (even if `maxlen` is 0-bits).
 
-  Probably only useful in combination with `Prefix.bitfield` to extract
-  bitfields from a prefix and cast those fields to integers.
+  See `cut/3` for how this capability might be useful.
 
   ## Examples
 
-      iex> %Prefix{bits: <<255, 255>>, maxlen: 16} |> cast_int()
+      iex> %Prefix{bits: <<255, 255>>, maxlen: 16} |> cast()
       65535
 
       # missing bits filled in as `0`s
-      iex> %Prefix{bits: <<255>>, maxlen: 16} |> cast_int()
+      iex> %Prefix{bits: <<255>>, maxlen: 16} |> cast()
       65280
 
-      iex> %Prefix{bits: <<-1::128>>, maxlen: 128} |> cast_int()
+      iex> %Prefix{bits: <<-1::128>>, maxlen: 128} |> cast()
       340282366920938463463374607431768211455
 
-      iex> %Prefix{bits: <<>>, maxlen: 8} |> cast_int()
+      iex> %Prefix{bits: <<>>, maxlen: 8} |> cast()
       0
 
-      # bit weird perhaps, but:
-      iex> %Prefix{bits: <<>>, maxlen: 0} |> cast_int()
+      # bit weird, but:
+      iex> %Prefix{bits: <<>>, maxlen: 0} |> cast()
       0
-
 
   """
-  @spec cast_int(t()) :: non_neg_integer
-  def cast_int(prefix) when valid?(prefix),
-    do: cast_intp(prefix.bits, prefix.maxlen)
+  @spec cast(t()) :: non_neg_integer
+  def cast(prefix) when valid?(prefix),
+    do: castp(prefix.bits, prefix.maxlen)
+
+  def cast(x) when is_exception(x), do: x
+  def cast(x), do: error(:cast, x)
 
   @doc """
   A bitwise NOT of the *prefix.bits*.
@@ -419,7 +424,7 @@ defmodule Prefix do
   @spec bnot(t) :: t | PrefixError.t()
   def bnot(prefix) when valid?(prefix) do
     width = bit_size(prefix.bits)
-    x = cast_intp(prefix.bits, width)
+    x = castp(prefix.bits, width)
     x = ~~~x
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
@@ -445,8 +450,8 @@ defmodule Prefix do
   @spec band(t, t) :: t | PrefixError.t()
   def band(prefix1, prefix2) when valid?(prefix1, prefix2) do
     width = max(bit_size(prefix1.bits), bit_size(prefix2.bits))
-    x = cast_intp(prefix1.bits, width)
-    y = cast_intp(prefix2.bits, width)
+    x = castp(prefix1.bits, width)
+    y = castp(prefix2.bits, width)
     z = x &&& y
     %Prefix{prefix1 | bits: <<z::size(width)>>}
   end
@@ -480,8 +485,8 @@ defmodule Prefix do
   @spec bor(t, t) :: t | PrefixError.t()
   def bor(prefix1, prefix2) when valid?(prefix1, prefix2) do
     width = max(bit_size(prefix1.bits), bit_size(prefix2.bits))
-    x = cast_intp(prefix1.bits, width)
-    y = cast_intp(prefix2.bits, width)
+    x = castp(prefix1.bits, width)
+    y = castp(prefix2.bits, width)
     z = x ||| y
     %Prefix{prefix1 | bits: <<z::size(width)>>}
   end
@@ -512,8 +517,8 @@ defmodule Prefix do
   @spec bxor(t, t) :: t | PrefixError.t()
   def bxor(prefix1, prefix2) when valid?(prefix1, prefix2) do
     width = max(bit_size(prefix1.bits), bit_size(prefix2.bits))
-    x = cast_intp(prefix1.bits, width)
-    y = cast_intp(prefix2.bits, width)
+    x = castp(prefix1.bits, width)
+    y = castp(prefix2.bits, width)
     z = x ^^^ y
     %Prefix{prefix1 | bits: <<z::size(width)>>}
   end
@@ -546,7 +551,7 @@ defmodule Prefix do
   def brot(prefix, n) when valid?(prefix) and is_integer(n) do
     width = bit_size(prefix.bits)
     n = rem(n, width)
-    x = cast_intp(prefix.bits, width)
+    x = castp(prefix.bits, width)
     m = ~~~(1 <<< n)
     r = x &&& m
     l = x >>> n
@@ -573,7 +578,7 @@ defmodule Prefix do
   @spec bsl(t, integer) :: t | PrefixError.t()
   def bsl(prefix, n) when valid?(prefix) and is_integer(n) do
     width = bit_size(prefix.bits)
-    x = cast_intp(prefix.bits, width)
+    x = castp(prefix.bits, width)
     x = x <<< n
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
@@ -596,7 +601,7 @@ defmodule Prefix do
   @spec bsr(t, integer) :: t | PrefixError.t()
   def bsr(prefix, n) when valid?(prefix) and is_integer(n) do
     width = bit_size(prefix.bits)
-    x = cast_intp(prefix.bits, width)
+    x = castp(prefix.bits, width)
     x = x >>> n
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
@@ -660,7 +665,7 @@ defmodule Prefix do
     nbits = min(n, prefix.maxlen - bsize)
     width = bsize + nbits
     y = if bit == 0, do: 0, else: (1 <<< nbits) - 1
-    x = cast_intp(prefix.bits, width) + y
+    x = castp(prefix.bits, width) + y
 
     %Prefix{prefix | bits: <<x::size(width)>>}
   end
@@ -715,7 +720,7 @@ defmodule Prefix do
     bsize = bit_size(prefix.bits)
     nbits = min(n, prefix.maxlen - bsize)
     y = if bit == 0, do: 0, else: (1 <<< nbits) - 1
-    x = cast_intp(prefix.bits, bsize)
+    x = castp(prefix.bits, bsize)
 
     %Prefix{prefix | bits: <<y::size(nbits), x::size(bsize)>>}
   end
@@ -952,7 +957,7 @@ defmodule Prefix do
   @spec sibling(t, integer) :: t | PrefixError.t()
   def sibling(prefix, offset) when valid?(prefix) and is_integer(offset) do
     bsize = bit_size(prefix.bits)
-    x = cast_intp(prefix.bits, bit_size(prefix.bits))
+    x = castp(prefix.bits, bit_size(prefix.bits))
     x = x + offset
 
     %Prefix{prefix | bits: <<x::size(bsize)>>}

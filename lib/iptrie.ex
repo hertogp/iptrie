@@ -772,4 +772,40 @@ defmodule Iptrie do
   # o hosts_lazy :: return stream that returns hosts addresses
   # o map_lazy?
   # o Enumerable for Iptrie?
+  # o dns_ptr(prefix) -> reverse dns name
+  # IPv6 - info
+  # Address            : 93918609
+  # AddressFamily      : InterNetwork
+  # ScopeId            : 
+  # IsIPv6Multicast    : False
+  # IsIPv6LinkLocal    : False
+  # IsIPv6SiteLocal    : False
+  # IsIPv6Teredo       : False
+  # IsIPv4MappedToIPv6 : False
+  # IPAddressToString  : 145.21.153.5
+  #
+  # See also:
+  # - https://en.wikipedia.org/wiki/IPv6_address
+  # - https://en.wikipedia.org/wiki/6to4
+  # In an IPv6 address, the first 48 bits are the network prefix. The next 16
+  # bits are the subnet ID and are used for defining subnets. The last 64 bits
+  # are the interface identifier (which is also known as the Interface ID or the
+  # Device ID).
+  #
+  # If necessary, the bits that are normally reserved for the Device ID can be
+  # used for additional subnet masking. However, this is normally not necessary,
+  # as using a 16-bit subnet and a 64-bit device ID provides for 65,535 subnets
+  # with quintillions of possible device IDs per subnet. Still, some
+  # organizations are already going beyond 16-bit subnet IDs.
+  #
+  # As a result, a number of transition technologies use tunneling to facilitate
+  # cross network compatibility. Two such technologies are
+  # - Teredo and
+  # - 6to4.
+  #
+  # Although these technologies work in different ways, the basic idea is that
+  # both encapsulate IPv6 packets inside IPv4 packets. That way, IPv6 traffic
+  # can flow across an IPv4 network. Keep in mind, however, that tunnel
+  # endpoints are required on both ends to encapsulate and extract the IPv6
+  # packets.
 end

@@ -356,6 +356,74 @@ defmodule PrefixTest do
     assert @runError == bsr(@runError, 0)
   end
 
+  # Prefix.cut
+  test "cut()" do
+    pfx = new(<<255, 0, 255, 0>>, 32)
+
+    assert cut(pfx, 0, 0) == new(<<>>, 0)
+    assert cut(pfx, 0, 4) == new(<<15::4>>, 4)
+    assert cut(pfx, 0, 8) == new(<<255>>, 8)
+    assert cut(pfx, 0, 16) == new(<<255, 0>>, 16)
+    assert cut(pfx, 0, 24) == new(<<255, 0, 255>>, 24)
+    assert cut(pfx, 0, 32) == pfx
+
+    assert cut(pfx, -1, -8) == new(<<0>>, 8)
+    assert cut(pfx, -1, -16) == new(<<255, 0>>, 16)
+    assert cut(pfx, -1, -24) == new(<<0, 255, 0>>, 24)
+    assert cut(pfx, -1, -32) == pfx
+
+    assert cut(pfx, 8, 8) == new(<<0>>, 8)
+    assert cut(pfx, 8, 16) == new(<<0, 255>>, 16)
+    assert cut(pfx, 8, 24) == new(<<0, 255, 0>>, 24)
+
+    assert cut(pfx, 4, 4) == new(<<15::4>>, 4)
+    assert cut(pfx, 3, 5) == new(<<31::5>>, 5)
+    assert cut(pfx, 15, 2) == new(<<1::2>>, 2)
+    assert cut(pfx, 23, 2) == new(<<2::2>>, 2)
+    assert cut(pfx, 31, 1) == new(<<0::1>>, 1)
+    assert cut(pfx, 0, 1) == new(<<1::1>>, 1)
+
+    # must stay within bounds of maxlen
+    assert %PrefixError{id: :cut} = cut(pfx, 24, 9)
+    assert %PrefixError{id: :cut} = cut(pfx, -1, 9)
+    assert %PrefixError{id: :cut} = cut(pfx, 1, -2)
+
+    # bad input
+    assert %PrefixError{id: :cut} = cut(@pfxIllegal, 1, 1)
+    assert %PrefixError{id: :cut} = cut("42", 1, 1)
+    assert %PrefixError{id: :cut} = cut(42, 1, 1)
+
+    # exceptions are passed through
+    assert @pfxError == cut(@pfxError, 0, 0)
+    assert @runError == cut(@runError, 0, 0)
+  end
+
+  # Prefix.cast
+  test "cast()" do
+    assert new(<<255>>, 8) |> cast() == 255
+
+    # pads right before cast'ing
+    assert new(<<255>>, 16) |> cast() == 65280
+
+    assert new(<<1::1>>, 1) |> cast() == 1
+    assert new(<<8::4>>, 4) |> cast() == 8
+
+    assert new(<<>>, 8) |> cast() == 0
+    assert new(<<>>, 128) |> cast() == 0
+
+    # absence of any bits defaults to 0 (perhaps weird)
+    assert new(<<>>, 0) |> cast() == 0
+
+    # bad input
+    assert %PrefixError{id: :cast} = cast(@pfxIllegal)
+    assert %PrefixError{id: :cast} = cast("42")
+    assert %PrefixError{id: :cast} = cast(42)
+
+    # exceptions are passed through
+    assert @pfxError == cast(@pfxError)
+    assert @runError == cast(@runError)
+  end
+
   # Prefix.padr
   test "padr()" do
     pfx = new(<<1, 2>>, 32)
