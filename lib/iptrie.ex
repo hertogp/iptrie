@@ -125,7 +125,7 @@ defmodule Iptrie do
     |> decode()
   end
 
-  # Trie functions
+  # Tree functions
 
   @doc """
   Create an new, empty Iptrie.
@@ -473,7 +473,7 @@ defmodule Iptrie do
   def dot(%__MODULE__{} = tree, fname),
     do: Dot.write(tree, fname)
 
-  # IP functions
+  # Prefix functions
 
   @doc """
   Return the this-network address in CIDR-notation for given *prefix*.
@@ -768,7 +768,42 @@ defmodule Iptrie do
     |> size()
   end
 
+  def is_private(prefix) when is_binary(prefix),
+    do: prefix |> encode() |> is_private?()
+
+  defp is_private?(%Prefix{maxlen: 32} = x) do
+    # https://tools.ietf.org/rfc/rfc1918.txt
+    cut(x, 0, 8) |> cast() == 10 or
+      cut(x, 0, 12) |> cast() == 2753 or
+      cut(x, 0, 16) |> cast() == 49320 or
+      false
+  end
+
+  defp is_private?(%Prefix{maxlen: 128} = _x), do: false
+
+  defp is_private?(x) when is_exception(x), do: x
+
+  def teredo(prefix) do
+    # TODO: check prefix is actually a teredo prefix
+    case encode(prefix) do
+      x when is_exception(x) ->
+        nil
+
+      x ->
+        %{
+          server: cut(x, 32, 32) |> decode(),
+          client: cut(x, 96, 32) |> bnot() |> decode(),
+          port: cut(x, 80, 16) |> bnot() |> cast(),
+          flags: cut(x, 64, 16) |> digits(1) |> elem(0)
+        }
+    end
+  end
+
   # TODO
+  # Special prefixes:
+  # - https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.txt
+  # - https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
+  #
   # o hosts_lazy :: return stream that returns hosts addresses
   # o map_lazy?
   # o Enumerable for Iptrie?
