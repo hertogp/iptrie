@@ -1057,6 +1057,18 @@ defmodule Prefix do
   def member(x, _, _) when is_exception(x), do: x
   def member(x, n, w), do: error(:member, {x, n, w})
 
+  @doc """
+  Returns true is prefix x is a member of prefix y
+
+  If either x or y is invalid, member? returns false
+
+  """
+  @spec member?(t, t) :: boolean
+  def member?(x, y) when valid?(x, y) and bit_size(y.bits) <= bit_size(x.bits),
+    do: y.bits == truncate(x.bits, bit_size(y.bits))
+
+  def member?(_, _), do: false
+
   # Format
 
   @doc ~S"""

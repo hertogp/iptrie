@@ -95,7 +95,7 @@ defmodule Prefix.IP do
   """
 
   @impl Prefix
-  @spec encode(String.t() | address() | digits()) :: Prefix.t() | PrefixError.t()
+  @spec encode(String.t() | address() | digits() | Prefix.t()) :: Prefix.t() | PrefixError.t()
   def encode(prefix) when is_binary(prefix) do
     charlist = String.to_charlist(prefix)
     {address, mask} = splitp(charlist, [])
