@@ -418,7 +418,7 @@ defmodule Iptrie do
   {key,value}-pair and an accumulator of choice and returns the updated
   accumulator.
 
-  # Examples
+  ## Examples
 
   Convert an `t:Iptrie.t/0` to a map.
 
@@ -772,22 +772,15 @@ defmodule Iptrie do
   end
 
   # Addresses
-  # - ::/128          Unspecified address.
-  # o ::1/128         Loopback address to the local host.
-  # o ::ffff:0:0/96   IPv4 mapped addresses.
-  # o ::ffff:0:0:0/96 IPv4 translated addresses.
-  # o 64:ff9b::/96    IPv4/IPv6 translation
-  # - 100::/64        Routing	Discard prefix
-  # x 2001::/32       Teredo tunneling.
-  # o 2001:20::/28    ORCHIDv2
-  # - 2001:db8::/32   documentation and example source code
-  # - 2002::/16       The 6to4 addressing scheme (now deprecated)
-  # o fc00::/7        Unique local address
-  # x fe80::/10       local address.
-  # x ff00::/8        Multicast address.
+  # - https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
+  # - https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
+  # - https://en.wikipedia.org/wiki/IPv6_address
+  # - https://en.wikipedia.org/wiki/6to4
 
   @doc """
   Returns true if *prefix* is a teredo address, false otherwise
+
+  See [rfc4380](https://www.iana.org/go/rfc4380).
 
   ## Example
 
@@ -806,24 +799,21 @@ defmodule Iptrie do
   end
 
   @doc """
-  Returns a map with the teredo address components.
+  Returns a map with the teredo address components or nil.
 
   Returns nil if *prefix* is not a teredo address, or simply invalid.
 
   ## Example
 
       # https://en.wikipedia.org/wiki/Teredo_tunneling#IPv6_addressing
-      iex> m = teredo("2001:0000:4136:e378:8000:63bf:3fff:fdd2")
-      iex> m.client
-      "192.0.2.45"
-      iex> m.server
-      "65.54.227.120"
-      iex> m.port
-      40000
-      iex> m.flags
-      {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-      iex> m.address
-      %Prefix{bits: <<32, 1, 0, 0, 65, 54, 227, 120, 128, 0, 99, 191, 63, 255, 253, 210>>, maxlen: 128}
+      iex> teredo("2001:0000:4136:e378:8000:63bf:3fff:fdd2")
+      %{
+        prefix: "2001:0000:4136:e378:8000:63bf:3fff:fdd2",
+        client: "192.0.2.45",
+        server: "65.54.227.120",
+        flags: {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        port: 40000
+      }
   """
   @spec teredo(prefix) :: map | nil
   def teredo(prefix) do
@@ -836,7 +826,7 @@ defmodule Iptrie do
         client: cut(x, 96, 32) |> bnot() |> decode(),
         port: cut(x, 80, 16) |> bnot() |> cast(),
         flags: cut(x, 64, 16) |> digits(1) |> elem(0),
-        address: x
+        prefix: prefix
       }
     else
       nil
@@ -897,14 +887,14 @@ defmodule Iptrie do
             preamble: cut(x, 0, 8) |> cast(),
             flags: cut(x, 8, 4) |> digits(1) |> elem(0),
             scope: cut(x, 12, 4) |> cast(),
-            groupID: cut(x, 16, 112).bits,
+            groupID: bits(x, 16, 112),
             address: x
           }
 
         32 ->
           %{
             digits: digits(x, 8) |> elem(0),
-            groupID: cut(x, 4, 28).bits,
+            groupID: bits(x, 4, 28),
             address: x
           }
       end
@@ -915,6 +905,11 @@ defmodule Iptrie do
 
   @doc """
   Returns true if *prefix* is a link-local prefix, false otherwise
+
+  See:
+  - https://tools.ietf.org/html/rfc1122, 0.0.0.0/8       -> this-network (link)
+  - https://www.iana.org/go/rfc3927,     169.254.0.0/16  -> link-local
+  - https://tools.ietf.org/html/rfc4291, fe80::/16       -> link-local
   """
   @spec link_local?(prefix | PrefixError.t()) :: boolean
   def link_local?(prefix) do
@@ -924,6 +919,8 @@ defmodule Iptrie do
 
     cond do
       member?(x, %Prefix{bits: <<169, 254>>, maxlen: 32}) -> true
+      member?(x, %Prefix{bits: <<0>>, maxlen: 32}) -> true
+      member?(x, %Prefix{bits: <<255, 255, 255, 255>>, maxlen: 32}) -> true
       member?(x, %Prefix{bits: <<0xFE80::16, 0::48>>, maxlen: 128}) -> true
       true -> false
     end
@@ -933,6 +930,10 @@ defmodule Iptrie do
   Return a map with link-local address components.
 
   Returns nil if *prefix* is not link-local or simply invalid.
+
+  See:
+  - https://www.iana.org/go/rfc3927
+  - 
   """
   @spec link_local(prefix) :: map | nil
   def link_local(prefix) do
@@ -943,69 +944,165 @@ defmodule Iptrie do
         128 ->
           %{
             preamble: cut(x, 0, 10) |> cast(),
-            network: %Prefix{bits: cut(x, 0, 64).bits, maxlen: 128},
-            interfaceID: cut(x, 64, 64).bits,
-            address: x
+            network: %Prefix{bits: bits(x, 0, 64), maxlen: 128} |> decode(),
+            interfaceID: bits(x, 64, 64),
+            prefix: prefix
           }
 
         32 ->
           %{
             digits: digits(x, 8) |> elem(0),
-            network: %Prefix{bits: cut(x, 0, 16).bits, maxlen: 32},
-            hostID: cut(x, 16, 16).bits,
-            address: x
+            network: %Prefix{bits: bits(x, 0, 16), maxlen: 32} |> decode(),
+            hostID: bits(x, 16, 16),
+            prefix: prefix
           }
       end
     end
   end
 
   @doc """
-  Returns true if *prefix* is a NAT64 ipv6 address, false otherwise.
+  Returns true if *prefix* is designated as "private-use".
+
+  For IPv4 this includes the [rfc1918](https://www.iana.org/go/rfc1918)
+  prefixes 10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16.  For IPv6 this
+  includes the [rfc4193](https://www.iana.org/go/rfc4193) prefix fc00::/7.
+
+  ## Examples
+
+      iex> unique_local?("172.31.255.255")
+      true
+
+      iex> unique_local?("10.10.10.10")
+      true
+
+      iex> unique_local?("fc00:acdc::")
+      true
+
+      iex> unique_local?("172.32.0.0")
+      false
+
+  """
+  def unique_local?(prefix) do
+    x = encode(prefix)
+
+    cond do
+      member?(x, %Prefix{bits: <<10>>, maxlen: 32}) -> true
+      member?(x, %Prefix{bits: <<172, 1::4>>, maxlen: 32}) -> true
+      member?(x, %Prefix{bits: <<192, 168>>, maxlen: 32}) -> true
+      member?(x, %Prefix{bits: <<126::7>>, maxlen: 128}) -> true
+      true -> false
+    end
+  end
+
+  @doc """
+  Returns true if *prefix* is matched by the Well-Known Prefixes as per
+  [rfc6052](https://www.iana.org/go/rfc6052) and/or
+  [rfc8215](https://www.iana.org/go/rfc8215), false otherwise.
 
   ## Example
 
       iex> nat64?("64:ff9b::10.10.10.10")
       true
 
+      iex> nat64?("64:ff9b:1::10.10.10.10")
+      true
+
   """
   @spec nat64?(prefix | PrefixError.t()) :: boolean
   def nat64?(prefix) do
-    prefix
-    |> encode()
-    |> member?(%Prefix{bits: <<0x64::16, 0xFF9B::16, 0::64>>, maxlen: 128})
+    x = encode(prefix)
+
+    member?(x, %Prefix{bits: <<0x0064::16, 0xFF9B::16, 0::64>>, maxlen: 128}) or
+      member?(x, %Prefix{bits: <<0x0064::16, 0xFF9B::16, 1::16>>, maxlen: 128})
   end
 
   @doc """
-  Return a map with the nat64 address components.
+  Return a map with ipv6 *prefix* and embedded *ipv4* address.
 
-  Returns nil if *prefix* is not a NAT64 address or simply invalid.
+  Returns nil if the *prefix* given is not a full IPv6 address (or simply invalid)
+  or *plen* is not one of: 32, 40, 48, 56, 64, or 96.
+
+  *plen* defaults to `96`, but is also auto-corrected to either 96 or 48 if the
+  *prefix* given is either the Well-Known prefix of
+  [rfc6052](https://www.iana.org/go/rfc6052) or the Well-Known prefix of
+  [rfc8215](https://www.iana.org/go/rfc8215).  Otherwise the *plen* must be
+  specified for Network Specific prefixes.
 
   ## Example
 
-      iex> m = nat64("64:ff9b::10.10.10.10")
-      iex> m.address
-      %Prefix{bits: <<0x64::16, 0xff9b::16, 0::64, 10, 10, 10, 10>>, maxlen: 128}
-      iex> m.ipv4
-      "10.10.10.10"
-      iex> m.network
-      %Prefix{bits: <<0x64::16, 0xff9b::16, 0::64>>, maxlen: 128}
+      iex> nat64("64:ff9b::10.10.10.10")
+      %{prefix: "64:ff9b::/96", ipv4: "10.10.10.10"}
 
+      # auto-correct plen for Well-Known prefix
+      iex> nat64("64:ff9b::10.10.10.10", 48)
+      %{prefix: "64:ff9b::/96", ipv4: "10.10.10.10"}
 
+      iex> nat64("64:ff9b:1:0a0a:000a:0a00::")
+      %{prefix: "64:ff9b:1::/48", ipv4: "10.10.10.10"}
+
+      # examples from rfc6052, section 2.4
+
+      iex> nat64("2001:db8:c000:221::", 32)
+      %{prefix: "2001:db8::/32", ipv4: "192.0.2.33"}
+
+      iex> nat64("2001:db8:1c0:2:21::", 40)
+      %{prefix: "2001:db8:100::/40", ipv4: "192.0.2.33"}
+
+      iex> nat64("2001:db8:122:c000:2:2100::", 48)
+      %{prefix: "2001:db8:122::/48", ipv4: "192.0.2.33"}
+
+      iex> nat64("2001:db8:122:3c0:0:221::", 56)
+      %{prefix: "2001:db8:122:300::/56", ipv4: "192.0.2.33"}
+
+      iex> nat64("2001:db8:122:344:c0:2:2100::", 64)
+      %{prefix: "2001:db8:122:344::/64", ipv4: "192.0.2.33"}
+
+      iex> nat64("2001:db8:122:344::192.0.2.33", 96)
+      %{prefix: "2001:db8:122:344::/96", ipv4: "192.0.2.33"}
+
+      # legal lengths are 96, 64, 56, 48, 40 and 32
+      iex> nat64("2001:db8:122:344::192.0.2.33", 90)
+      nil
 
   """
-  @spec nat64(prefix) :: map | nil
-  def nat64(prefix) do
-    x = encode(prefix)
+  @spec nat64(prefix(), pos_integer) :: map | nil
+  def nat64(prefix, plen \\ 96) do
+    prefix
+    |> encode()
+    |> nat64p(plen)
+  end
 
-    if nat64?(x) do
-      %{
-        network: %Prefix{bits: cut(x, 0, 96).bits, maxlen: 128},
-        ipv4: %Prefix{bits: cut(x, 96, 32).bits, maxlen: 32} |> decode(),
-        address: x
-      }
-    else
-      nil
-    end
+  defp nat64p(x, _) when is_exception(x), do: nil
+
+  defp nat64p(x, l) when l in [96, 64, 56, 48, 40, 32] and bit_size(x.bits) == 128 do
+    # auto-correct plen's value for Well-Known prefixes of rfc6052 or rfc8215
+    plen =
+      cond do
+        member?(x, %Prefix{bits: <<0x0064::16, 0xFF9B::16, 0::64>>, maxlen: 128}) -> 96
+        member?(x, %Prefix{bits: <<0x0064::16, 0xFF9B::16, 1::16>>, maxlen: 128}) -> 48
+        true -> l
+      end
+
+    x = if plen < 96, do: %{x | bits: bits(x, [{0, 64}, {72, 56}])}, else: x
+
+    %{
+      prefix: %Prefix{bits: bits(x, 0, plen), maxlen: 128} |> decode(),
+      ipv4: %Prefix{bits: bits(x, plen, 32), maxlen: 32} |> decode()
+    }
+  end
+
+  defp nat64p(_, _), do: nil
+
+  @spec nat46(prefix(), prefix()) :: String.t() | PrefixError.t()
+  @doc """
+  Return the IPv4-embedded IPv6 address or nil in case of errors.
+
+  """
+  def nat46(ip6, _ip4) when is_exception(ip6), do: ip6
+  def nat46(_ip6, ip4) when is_exception(ip4), do: ip4
+
+  def nat46(prefix, ip4) do
+    "" <> prefix <> ip4
   end
 
   # TODO
@@ -1014,88 +1111,9 @@ defmodule Iptrie do
   # o map_lazy?
   # o Enumerable for Iptrie?
   # o dns_ptr(prefix) -> reverse dns name
-  # IPv6 - info
-  # Address            : 93918609
-  # AddressFamily      : InterNetwork
-  # ScopeId            : 
-  # IsIPv6Multicast    : False
-  # IsIPv6LinkLocal    : False
-  # IsIPv6SiteLocal    : False
-  # IsIPv6Teredo       : False
-  # IsIPv4MappedToIPv6 : False
-  # IPAddressToString  : 145.21.153.5
+  # o read/write from/to file?
   #
   # See also:
   # - https://en.wikipedia.org/wiki/IPv6_address
   # - https://en.wikipedia.org/wiki/6to4
-  # In an IPv6 address, the first 48 bits are the network prefix. The next 16
-  # bits are the subnet ID and are used for defining subnets. The last 64 bits
-  # are the interface identifier (which is also known as the Interface ID or the
-  # Device ID).
-  #
-  # If necessary, the bits that are normally reserved for the Device ID can be
-  # used for additional subnet masking. However, this is normally not necessary,
-  # as using a 16-bit subnet and a 64-bit device ID provides for 65,535 subnets
-  # with quintillions of possible device IDs per subnet. Still, some
-  # organizations are already going beyond 16-bit subnet IDs.
-  #
-  # As a result, a number of transition technologies use tunneling to facilitate
-  # cross network compatibility. Two such technologies are
-  # - Teredo and
-  # - 6to4.
-  #
-  # Although these technologies work in different ways, the basic idea is that
-  # both encapsulate IPv6 packets inside IPv4 packets. That way, IPv6 traffic
-  # can flow across an IPv4 network. Keep in mind, however, that tunnel
-  # endpoints are required on both ends to encapsulate and extract the IPv6
-  # packets.
-  def info(prefix) do
-    alias Iptrie.Info
-    Info.get(prefix)
-  end
-end
-
-defmodule Iptrie.Info do
-  import Iptrie
-  import Prefix.IP
-
-  # Special prefixes:
-  # - https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.txt
-  # - https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
-
-  @default %{public: true, name: "n/a", rfc: "n/a"}
-  @specials %{
-    "0.0.0.0/0" => %{version: :ip4, name: "n/a", rfc: "n/a", public: true},
-    "0.0.0.0/8" => %{
-      version: :ip4,
-      name: "This host, this network",
-      rfc: "rfc1122",
-      public: false
-    },
-    "10.0.0.0/8" => %{version: :ip4, name: "Private use", rfc: "rfc1918", public: false},
-    "100.64.0.0/10" => %{
-      version: :ip4,
-      name: "Shared Address Space",
-      rfc: "rfc6598",
-      public: false
-    },
-    "127.0.0.0/8" => %{version: :ip4, name: "Loopback", rfc: "rfc1122", public: false},
-    "169.254.0.0/16" => %{version: :ip4, name: "Link local", rfc: "rfc3927", public: false},
-    "172.16.0.0/12" => %{version: :ip4, name: "Private use", rfc: "rfc1918", public: false}
-  }
-
-  @info new(Map.to_list(@specials))
-
-  def get(prefix),
-    do: getp(encode(prefix))
-
-  defp getp(x) when is_exception(x),
-    do: {:error, x}
-
-  defp getp(x) do
-    case lookup(@info, x) do
-      nil -> {:ok, @default}
-      x -> {:ok, elem(x, 1)}
-    end
-  end
 end

@@ -121,7 +121,7 @@ defmodule Prefix do
   A prefix struct with fields `bits` and `maxlen`.
 
   """
-  @type t :: %__MODULE__{bits: <<_::_*1>>, maxlen: pos_integer}
+  @type t :: %__MODULE__{bits: <<_::_*1>>, maxlen: non_neg_integer}
 
   # Behaviour
 
@@ -257,7 +257,7 @@ defmodule Prefix do
       %Prefix{maxlen: 128, bits: <<10, 10>>}
 
   """
-  @spec new(t | bitstring, pos_integer) :: t | PrefixError.t()
+  @spec new(t | bitstring, non_neg_integer) :: t | PrefixError.t()
   def new(bits, maxlen) when types?(bits, maxlen),
     do: %__MODULE__{bits: truncate(bits, maxlen), maxlen: maxlen}
 
@@ -267,42 +267,10 @@ defmodule Prefix do
   def new(x, _) when is_exception(x), do: x
   def new(x, m), do: error(:new, {x, m})
 
-  # Bit Ops
-
-  @doc """
-  Return *prefix*'s bit-value at given *position*.
-
-  A bit position is a `0`-based index from the left.  A position beyond the
-  *prefix.bits*-length always yields a `0`, regardless of whether it is also
-  beyond *prefix.maxlen*.
-
-  ## Examples
-
-      iex> x = new(<<255, 1>>, 32)
-      iex> bit(x, 0)
-      1
-      iex> bit(x, 7)
-      1
-      iex> bit(x, 8)
-      0
-      iex> bit(x, 15)
-      1
-      iex> bit(x, 12345)
-      0
-
-  """
-  @spec bit(t, pos_integer) :: 0 | 1 | PrefixError.t()
-  def bit(prefix, position)
-      when is_integer(position) and position >= bit_size(prefix.bits),
-      do: 0
-
-  def bit(prefix, pos) when is_integer(pos) and pos < bit_size(prefix.bits) do
-    <<_::size(pos), bit::1, _::bitstring>> = prefix.bits
-    bit
-  end
-
-  def bit(x, _) when is_exception(x), do: x
-  def bit(x, y), do: error(:bit, {x, y})
+  # Slice Dice
+  # TODO:
+  # - rename slice to 
+  # - rename cut to snip
 
   @doc """
   Cut out a series of bits and turn it into its own `Prefix`.
@@ -372,6 +340,127 @@ defmodule Prefix do
 
   def cut(x, _, _) when is_exception(x), do: x
   def cut(x, p, l), do: error(:cut, {x, p, l})
+
+  # Bit Ops
+
+  @doc """
+  Return *prefix*'s bit-value at given *position*.
+
+  A bit position is a `0`-based index from the left.  A position beyond the
+  *prefix.bits*-length always yields a `0`, regardless of whether it is also
+  beyond *prefix.maxlen*.
+
+  ## Examples
+
+      iex> x = new(<<0, 1>>, 32)
+      iex> bit(x, 15)
+      1
+      iex> bit(x, -17)  # same bit
+      1
+      iex> bit(x, 12345)
+      %PrefixError{id: :bit, detail: {%Prefix{bits: <<0, 1>>, maxlen: 32}, 12345}}
+
+  """
+  @spec bit(t, integer) :: 0 | 1 | PrefixError.t()
+  def bit(prefix, position) when position + prefix.maxlen < 0 or position >= prefix.maxlen,
+    do: error(:bit, {prefix, position})
+
+  def bit(prefix, position) when position < 0,
+    do: bit(prefix, prefix.maxlen + position)
+
+  def bit(prefix, pos) when pos < bit_size(prefix.bits) do
+    <<_::size(pos), bit::1, _::bitstring>> = prefix.bits
+    bit
+  end
+
+  def bit(prefix, pos) when valid?(prefix) and pos < prefix.maxlen,
+    do: 0
+
+  def bit(x, _) when is_exception(x), do: x
+  def bit(x, y), do: error(:bit, {x, y})
+
+  @doc """
+  Return a series of bits for given *prefix* and starting bit *position* and
+  *length*.
+
+  Negative *position*'s are relative to the end of the prefix's bitstring,
+  while negative *length* means collect bits going left instead of to the
+  right.  Note that the bit at given *position* is always included in the
+  result regardless of direction.
+
+  ## Examples
+
+      iex> x = new(<<128, 0, 0, 1>>, 32)
+      iex> # first byte
+      iex> x |> bits(0, 8)
+      <<128>>
+      # same as
+      iex> x |> bits(7, -8)
+      <<128>>
+
+      # last two bytes
+      iex> x = new(<<128, 0, 128, 1>>, 32)
+      iex> x |> bits(16, 16)
+      <<128, 1>>
+      # same as
+      iex> x |> bits(-1, -16)
+      <<128, 1>>
+
+      # missing bits are filled in as `0`
+      iex> x = new(<<128>>, 32)
+      iex> x |> bits(0, 32)
+      <<128, 0, 0, 0>>
+      iex> x |> bits(-1, -32)
+      <<128, 0, 0, 0>>
+
+  """
+  @spec bits(t, integer, integer) :: bitstring() | PrefixError.t()
+  def bits(prefix, position, length) when valid?(prefix) and is_integer(position * length) do
+    pos = if position < 0, do: prefix.maxlen + position, else: position
+    {pos, len} = if length < 0, do: {pos + 1 + length, -length}, else: {pos, length}
+
+    cond do
+      pos < 0 or pos >= prefix.maxlen -> error(:bits, {prefix, position, length})
+      pos + len > prefix.maxlen -> error(:bits, {prefix, position, length})
+      true -> bitsp(prefix, pos, len)
+    end
+  end
+
+  def bits(x, _, _) when is_exception(x), do: x
+  def bits(x, p, l), do: error(:bits, {x, p, l})
+
+  defp bitsp(pfx, pos, len) do
+    pfx = padr(pfx)
+    <<_::size(pos), bits::bitstring-size(len), _::bitstring>> = pfx.bits
+    bits
+  end
+
+  @doc """
+  Return the concatenation of 1 or more snippets of bits of the given *prefix*
+  or the first `t:PrefixError.t/0` encountered during bit extraction using `bits/3`.
+
+  ## Example
+
+      iex> x = new(<<1, 2, 3, 4>>, 32)
+      iex> x |> bits([{0,8}, {-1, -8}])
+      <<1, 4>>
+      iex> x |> bits([{0, 8}, {-1, 8}])
+      %PrefixError{id: :bits, detail: {%Prefix{bits: <<1, 2, 3, 4>>, maxlen: 32}, -1, 8}}
+
+  """
+  @spec bits(t, [{integer, integer}]) :: bitstring | PrefixError.t()
+  def bits(prefix, pos_len) when valid?(prefix) and is_list(pos_len) do
+    Enum.map(pos_len, fn {pos, len} -> bits(prefix, pos, len) end)
+    |> Enum.reduce(<<>>, &joinbitsp/2)
+  end
+
+  def bits(x, _) when is_exception(x), do: x
+  def bits(x, pl), do: error(:bits, {x, pl})
+
+  # helper to joins bits or return any PrefixError argument provided
+  defp joinbitsp(x, _) when is_exception(x), do: x
+  defp joinbitsp(_, y) when is_exception(y), do: y
+  defp joinbitsp(x, y), do: <<y::bitstring, x::bitstring>>
 
   @doc """
   Cast a prefix to an integer.
@@ -659,7 +748,7 @@ defmodule Prefix do
       %Prefix{bits: <<1, 2, 0, 0>>, maxlen: 32}
 
   """
-  @spec padr(t, 0 | 1, pos_integer) :: t | PrefixError.t()
+  @spec padr(t, 0 | 1, non_neg_integer) :: t | PrefixError.t()
   def padr(prefix, bit, n) when valid?(prefix) and is_integer(n) do
     bsize = bit_size(prefix.bits)
     nbits = min(n, prefix.maxlen - bsize)
@@ -715,7 +804,7 @@ defmodule Prefix do
       %Prefix{bits: <<0, 0, 255, 255>>, maxlen: 32}
 
   """
-  @spec padl(t, 0 | 1, pos_integer) :: t | PrefixError.t()
+  @spec padl(t, 0 | 1, non_neg_integer) :: t | PrefixError.t()
   def padl(prefix, bit, n) when valid?(prefix) and is_integer(n) do
     bsize = bit_size(prefix.bits)
     nbits = min(n, prefix.maxlen - bsize)
@@ -772,7 +861,7 @@ defmodule Prefix do
       ]
 
   """
-  @spec slice(t, pos_integer) :: list(t) | PrefixError.t()
+  @spec slice(t, non_neg_integer) :: list(t) | PrefixError.t()
   def slice(prefix, newlen) when slice?(prefix, newlen) do
     width = newlen - bit_size(prefix.bits)
     max = (1 <<< width) - 1
@@ -808,7 +897,7 @@ defmodule Prefix do
       "000010100000101100001100"
 
   """
-  @spec fields(t, pos_integer) :: list({pos_integer, pos_integer}) | PrefixError.t()
+  @spec fields(t, non_neg_integer) :: list({non_neg_integer, non_neg_integer}) | PrefixError.t()
   def fields(prefix, width) when valid?(prefix) and is_integer(width) and width > 0,
     do: fields([], prefix.bits, width)
 

@@ -86,10 +86,10 @@ defmodule PrefixTest do
     assert bit(pfx, 30) == 0
     assert bit(pfx, 31) == 0
 
-    # bits beyond maxlen are always 0
-    assert bit(pfx, pfx.maxlen + 10) == 0
+    # bits beyond maxlen yield an exception
 
     # bad input
+    assert %PrefixError{id: :bit} = bit(pfx, pfx.maxlen + 10)
     assert %PrefixError{id: :bit} = bit(42, 0)
 
     # bad input: exception struct passthrough
