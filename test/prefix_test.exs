@@ -14,23 +14,17 @@ defmodule PrefixTest do
   # an illegal prefix, since bit_size(bits) > maxlen
   @pfxIllegal %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 16}
 
-  # Prefix
-  # Guards
-  test "valid?() - good input" do
-    require Prefix
-    pfx = %Prefix{bits: <<1>>, maxlen: 32}
-    assert Prefix.valid?(pfx)
-  end
+  # Prefix.valid?/2
+  test "valid?()" do
+    pfx = %Prefix{bits: <<1, 1, 1>>, maxlen: 32}
+    assert valid?(pfx)
 
-  test "valid?() - bad input" do
-    pfx = new(<<1, 1, 1>>, 32)
-    # make pfx invalid by setting maxlen to be less than the bit size
-    pfx = %Prefix{pfx | maxlen: 16}
-    refute Prefix.valid?(pfx)
+    # bad input
+    refute valid?(@pfxIllegal)
     # can't seem to test other invalid inputs like Prefix.valid?(42)
   end
 
-  # Prefix.new()
+  # Prefix.new
   test "new()" do
     # minimal prefix
     pfx = new(<<>>, 0)
@@ -66,7 +60,7 @@ defmodule PrefixTest do
     assert @runError == new(@runError, 128)
   end
 
-  # bit
+  # Prefix.bit
   test "bit()" do
     # good input
     pfx = new(<<1, 2, 4, 8>>, 32)
@@ -86,8 +80,6 @@ defmodule PrefixTest do
     assert bit(pfx, 30) == 0
     assert bit(pfx, 31) == 0
 
-    # bits beyond maxlen yield an exception
-
     # bad input
     assert %PrefixError{id: :bit} = bit(pfx, pfx.maxlen + 10)
     assert %PrefixError{id: :bit} = bit(42, 0)
@@ -95,6 +87,39 @@ defmodule PrefixTest do
     # bad input: exception struct passthrough
     assert @pfxError == bit(@pfxError, 0)
     assert @runError == bit(@runError, 0)
+  end
+
+  # Prefix.bits
+  test "&bits/3" do
+    # good input
+    pfx = new(<<128, 0, 128, 1>>, 32)
+
+    # normal pos, len's
+    assert bits(pfx, 0, 1) == <<1::1>>
+    assert bits(pfx, 0, 8) == <<128>>
+    assert bits(pfx, 0, 32) == <<128, 0, 128, 1>>
+
+    # negative len's
+    assert bits(pfx, 0, -1) == <<1::1>>
+    assert bits(pfx, 3, -4) == <<8::4>>
+    assert bits(pfx, 7, -8) == <<128>>
+    assert bits(pfx, 31, -16) == <<128, 1>>
+    assert bits(pfx, 23, -16) == <<0, 128>>
+    assert bits(pfx, 31, -32) == <<128, 0, 128, 1>>
+
+    # negative positions
+    assert bits(pfx, -1, 1) == <<1::1>>
+    assert bits(pfx, -32, -1) == <<1::1>>
+    assert bits(pfx, -32, 8) == <<128>>
+    assert bits(pfx, -32, 16) == <<128, 0>>
+
+    # bad inputs
+    assert %PrefixError{id: :bits} = bits(pfx, pfx.maxlen + 10)
+    assert %PrefixError{id: :bits} = bits(42, 0)
+
+    # bad input: exception struct passthrough
+    assert @pfxError == bits(@pfxError, 0)
+    assert @runError == bits(@runError, 0)
   end
 
   # Prefix.bnot
@@ -386,7 +411,7 @@ defmodule PrefixTest do
     # must stay within bounds of maxlen
     assert %PrefixError{id: :cut} = cut(pfx, 24, 9)
     assert %PrefixError{id: :cut} = cut(pfx, -1, 9)
-    assert %PrefixError{id: :cut} = cut(pfx, 1, -2)
+    assert %PrefixError{id: :cut} = cut(pfx, 0, -2)
 
     # bad input
     assert %PrefixError{id: :cut} = cut(@pfxIllegal, 1, 1)
@@ -757,10 +782,11 @@ defmodule PrefixTest do
     assert format(pfx, width: 16) == "258.1024/24"
     # base 10
     assert format(pfx, base: 10) == "1.2.4.0/24"
-    # base 16 per output digit, so still 16 digits
+    # base 16 per output digit, so still 16 digits each 8 bits wide
     assert format(new(<<0xACDC::16, 0x1976::16>>, 128), base: 16) ==
              "AC.DC.19.76.0.0.0.0.0.0.0.0.0.0.0.0/32"
 
+    # same, but set unit to 2 combining 2 digits before joining with separator
     assert format(new(<<0xACDC::16, 0x1976::16>>, 128), base: 16, unit: 2, ssep: ":") ==
              "ACDC:1976:00:00:00:00:00:00/32"
 

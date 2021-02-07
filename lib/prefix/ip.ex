@@ -177,7 +177,7 @@ defmodule Prefix.IP do
       iex> decode({{1, 1, 1, 1}, 24})
       "1.1.1.1/24"
 
-      # valid CIDR-strings are passed through, may without a full mask
+      # valid CIDR-strings are passed through
       iex> decode("1.1.1.1")
       "1.1.1.1"
       iex> decode("1.1.1.1/32")

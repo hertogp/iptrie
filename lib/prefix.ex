@@ -268,17 +268,12 @@ defmodule Prefix do
   def new(x, m), do: error(:new, {x, m})
 
   # Slice Dice
-  # TODO:
-  # - rename slice to 
-  # - rename cut to snip
 
   @doc """
   Cut out a series of bits and turn it into its own `Prefix`.
 
-  The given *prefix* is padded right with `0`-bits and after extraction, the
-  resulting prefix will have its `maxlen` set to the number of bits extracted
-  since the bits represent a construct of their own (e.g. a number or flags)
-  within the overall *prefix*.
+  This basically uses `&bits/3` to extract the bits and wraps it in a
+  `t:Prefix.t/0` with its `maxlen` set to the length of the bits extracted.
 
   ## Examples
 
@@ -325,17 +320,11 @@ defmodule Prefix do
 
   """
   @spec cut(t(), integer, integer) :: t() | PrefixError.t()
-  def cut(prefix, start, length)
-
-  def cut(%Prefix{} = x, pos, len) when pos < 0 and len <= 0 do
-    cut(x, x.maxlen + 1 + pos + len, -1 * len)
-  end
-
-  def cut(%Prefix{} = x, pos, len)
-      when valid?(x) and -1 < pos and pos < x.maxlen and pos + len <= x.maxlen and len >= 0 do
-    x = padr(x)
-    <<_::size(pos), bits::bitstring-size(len), _::bitstring>> = x.bits
-    %Prefix{bits: bits, maxlen: len}
+  def cut(prefix, start, length) when valid?(prefix) do
+    case bits(prefix, start, length) do
+      x when is_exception(x) -> error(:cut, {prefix, start, length})
+      bits -> new(bits, bit_size(bits))
+    end
   end
 
   def cut(x, _, _) when is_exception(x), do: x

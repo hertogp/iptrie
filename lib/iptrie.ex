@@ -17,7 +17,6 @@ defmodule Iptrie do
 
   """
   import Prefix
-  alias Prefix
   import Prefix.IP
   alias PrefixError
   alias Radix
