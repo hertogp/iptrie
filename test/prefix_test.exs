@@ -813,34 +813,6 @@ defmodule PrefixTest do
     assert @runError == format(@runError)
   end
 
-  # Prefix.compare
-  test "compare()" do
-    pfx = new(<<1, 2, 4>>, 32)
-
-    assert compare(pfx, pfx) == :eq
-
-    assert compare(pfx, new(<<1, 2, 3>>, 32)) == :gt
-    assert compare(new(<<1, 2, 3>>, 32), pfx) == :lt
-
-    # less bits means greater than ... more bits quite the opposite
-    assert compare(pfx, new(<<1, 2>>, 32)) == :lt
-    assert compare(new(<<1, 2>>, 32), pfx) == :gt
-
-    # bad input
-    assert %PrefixError{id: :compare} = compare(pfx, @pfxIllegal)
-    assert %PrefixError{id: :compare} = compare(@pfxIllegal, pfx)
-    assert %PrefixError{id: :compare} = compare(pfx, "42")
-    assert %PrefixError{id: :compare} = compare("42", pfx)
-    assert %PrefixError{id: :compare} = compare(pfx, 42)
-    assert %PrefixError{id: :compare} = compare(42, pfx)
-
-    # exceptions are passed through
-    assert @pfxError == compare(pfx, @pfxError)
-    assert @pfxError == compare(@pfxError, pfx)
-    assert @runError == compare(@runError, pfx)
-    assert @runError == compare(pfx, @runError)
-  end
-
   # Prefix.contrast
   test "contrast()" do
     pfx = new(<<1, 2, 4>>, 32)
@@ -868,6 +840,34 @@ defmodule PrefixTest do
     assert @pfxError == contrast(@pfxError, pfx)
     assert @runError == contrast(@runError, pfx)
     assert @runError == contrast(pfx, @runError)
+  end
+
+  # Prefix.compare
+  test "compare()" do
+    pfx = new(<<1, 2, 4>>, 32)
+
+    assert compare(pfx, pfx) == :eq
+
+    assert compare(pfx, new(<<1, 2, 3>>, 32)) == :gt
+    assert compare(new(<<1, 2, 3>>, 32), pfx) == :lt
+
+    # less bits means greater than ... more bits quite the opposite
+    assert compare(pfx, new(<<1, 2>>, 32)) == :lt
+    assert compare(new(<<1, 2>>, 32), pfx) == :gt
+
+    # bad input
+    assert %PrefixError{id: :compare} = compare(pfx, @pfxIllegal)
+    assert %PrefixError{id: :compare} = compare(@pfxIllegal, pfx)
+    assert %PrefixError{id: :compare} = compare(pfx, "42")
+    assert %PrefixError{id: :compare} = compare("42", pfx)
+    assert %PrefixError{id: :compare} = compare(pfx, 42)
+    assert %PrefixError{id: :compare} = compare(42, pfx)
+
+    # exceptions are passed through
+    assert @pfxError == compare(pfx, @pfxError)
+    assert @pfxError == compare(@pfxError, pfx)
+    assert @runError == compare(@runError, pfx)
+    assert @runError == compare(pfx, @runError)
   end
 
   # String.Chars.to_string
