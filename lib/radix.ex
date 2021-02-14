@@ -1,27 +1,27 @@
-defmodule RadixError do
-  defexception [:id, :detail]
+# defmodule RadixError do
+#   defexception [:id, :detail]
 
-  @typedoc """
-  An RadixError exception struct for signalling errors.
-  """
-  @type t :: %__MODULE__{id: atom, detail: any()}
+#   @typedoc """
+#   An RadixError exception struct for signalling errors.
+#   """
+#   @type t :: %__MODULE__{id: atom, detail: any()}
 
-  @spec new(atom, any()) :: t()
-  def new(id, detail),
-    do: %__MODULE__{id: id, detail: detail}
+#   @spec new(atom, any()) :: t()
+#   def new(id, detail),
+#     do: %__MODULE__{id: id, detail: detail}
 
-  @spec message(t()) :: String.t()
-  def message(x) when is_tuple(x.detail) do
-    x.detail
-    |> Tuple.to_list()
-    |> Enum.map(fn x -> "#{inspect(x)}" end)
-    |> Enum.join(", ")
-    |> (&"#{x.id}: args (#{&1})").()
-  end
+#   @spec message(t()) :: String.t()
+#   def message(x) when is_tuple(x.detail) do
+#     x.detail
+#     |> Tuple.to_list()
+#     |> Enum.map(fn x -> "#{inspect(x)}" end)
+#     |> Enum.join(", ")
+#     |> (&"#{x.id}: args (#{&1})").()
+#   end
 
-  def message(x),
-    do: "#{x.id}: #{inspect(x.detail)}"
-end
+#   def message(x),
+#     do: "#{x.id}: #{inspect(x.detail)}"
+# end
 
 # defmodule Radix.Leaf do
 #   @type t :: list({bitstring, term})
@@ -73,25 +73,19 @@ defmodule Radix do
 
   Regular binaries work too:
 
-      iex> t = new([{"hello", "Sir"}, {"hellooo", "there"}, {"nice", "not bad"}])
-      iex> lpm(t, "hello!")
-      {"hello", "Sir"}
+      iex> t = new([{"A.new", "new"}, {"A.newer", "newer"}, {"B.newest", "newest"}])
+      iex> rpm(t, "A.") |> Enum.reverse()
+      [{"A.new", "new"}, {"A.newer", "newer"}]
       #
-      iex> lpm(t, "hellooooooo")
-      {"hellooo", "there"}
+      iex> lpm(t, "A.newest")
+      {"A.new", "new"}
       #
-      iex> rpm(t, "hell")
-      [
-        {"hellooo", "there"},
-        {"hello", "Sir"}
-      ]
-      #
-      iex> lpm(t, "goodbye")
-      nil
+      iex> rpm(t, "C.")
+      []
 
   """
 
-  alias RadixError
+  # alias RadixError
 
   @typedoc """
   A user supplied accumulator.
@@ -139,9 +133,9 @@ defmodule Radix do
 
   # Helpers
 
-  @compile {:inline, error: 2}
-  defp error(id, detail),
-    do: RadixError.new(id, detail)
+  # @compile {:inline, error: 2}
+  # defp error(id, detail),
+  #   do: RadixError.new(id, detail)
 
   # bit
   # - extract the value of a bit in a key
@@ -387,7 +381,6 @@ defmodule Radix do
                [{<<1, 1, 1, 1>>, 32}]
            },
         nil}
-
 
   """
   @spec del(tree | leaf, list(key) | key) :: tree
