@@ -4,7 +4,8 @@ defmodule RadixTest do
 
   import Radix
 
-  @max 11
+  # Takes a looong time, when set to 255
+  @max 255
   @key_val8 (for x <- 0..@max do
                {<<x>>, <<x>>}
              end)

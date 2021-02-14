@@ -1,36 +1,3 @@
-# defmodule RadixError do
-#   defexception [:id, :detail]
-
-#   @typedoc """
-#   An RadixError exception struct for signalling errors.
-#   """
-#   @type t :: %__MODULE__{id: atom, detail: any()}
-
-#   @spec new(atom, any()) :: t()
-#   def new(id, detail),
-#     do: %__MODULE__{id: id, detail: detail}
-
-#   @spec message(t()) :: String.t()
-#   def message(x) when is_tuple(x.detail) do
-#     x.detail
-#     |> Tuple.to_list()
-#     |> Enum.map(fn x -> "#{inspect(x)}" end)
-#     |> Enum.join(", ")
-#     |> (&"#{x.id}: args (#{&1})").()
-#   end
-
-#   def message(x),
-#     do: "#{x.id}: #{inspect(x.detail)}"
-# end
-
-# defmodule Radix.Leaf do
-#   @type t :: list({bitstring, term})
-# end
-
-# defmodule Radix.Node do
-#   @type t :: {non_neg_integer, t | Radix.Leaf.t() | nil, t | Radix.Leaf.t() | nil}
-# end
-
 defmodule Radix do
   @moduledoc """
   A path-compressed Patricia trie with one-way branching removed.
@@ -503,14 +470,16 @@ defmodule Radix do
   end
 
   def rpm({b, l, r}, key) do
+    # when bit b is zero, right subtree might hold longer keys that key as a prefix
     case bit(key, b) do
-      0 -> rpm(l, key)
-      1 -> rpm(r, key) ++ rpm(l, key)
+      0 -> rpm(l, key) ++ rpm(r, key)
+      1 -> rpm(r, key)
     end
   end
 
   def rpm(nil, _), do: []
   def rpm(leaf, key), do: Enum.filter(leaf, fn {k, _} -> is_prefix?(key, k) end)
+
   # TRAVERSALs
 
   @doc """

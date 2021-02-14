@@ -26,6 +26,7 @@ defmodule IptrieTest do
     {:ok, ex02: ex02}
   end
 
+  # Iptrie.new
   test "ex01 - insertion order does not matter", context do
     t = Iptrie.new(context[:ex01])
 
@@ -80,7 +81,7 @@ defmodule IptrieTest do
     assert elem(Iptrie.lookup(t, "1.1.1.0"), 1) == "1.1.1.0/25"
     assert elem(Iptrie.lookup(t, "1.1.1.193"), 1) == "1.1.1.0/24"
 
-    # just for kicks, reverse order of insertion and test again
+    # reverse order of insertion and test again
     t = Iptrie.new(Enum.reverse(context[:ex02]))
 
     assert elem(Iptrie.lookup(t, "1.0.0.0"), 1) == "1.0.0.0/8"
