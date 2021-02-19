@@ -35,12 +35,15 @@ defmodule Iptrie do
   @typedoc """
   A prefix value: either a CIDR-string, address-tuple, {address,len}-tuple or a Prefix struct.
 
-  Examples include:
-  - "1.1.1.1" or "1.1.1.0/24" as CIDR-string
-  - {1, 1, 1, 1} address-tuple
-  - {{1, 1, 1, 0}, 24} digits-tuple
-  - %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32}
-
+  Examples:
+  - "1.1.1.1" or "1.1.1.0/24" as an IPv4 CIDR-string
+  - {1, 1, 1, 1} IPv4 address-tuple
+  - {{1, 1, 1, 0}, 24} IPv4 {address, len}-tuple
+  - %Prefix{bits: <<1, 1, 1, 1>>, maxlen: 32} a IPv4 prefix
+  - "acdc:1976::" or "acdc:1976::/32" as an IPv6 CIDR-string
+  - {0xacdc, 0x1976, 0, 0, 0, 0, 0, 0} IPv6 address-tuple
+  - {{0xacdc, 0x1976, 0, 0, 0, 0, 0, 0}, 32} IPv6 {address, len}-tuple
+  - %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128} a IPv6 prefix
 
   """
   @type prefix :: Prefix.t() | Prefix.IP.address() | Prefix.IP.digits() | String.t()
@@ -81,7 +84,8 @@ defmodule Iptrie do
   # Key/Unkey
   # - key returns a prefix's bits with an IPv4/IPv6 marker preprended
   # - unkey does the opposite and returns the original prefix
-  # used so both types can be stuffed down the same Radix tree
+  # used so both IPv4 and IPv6 can be stuffed down the same Radix tree
+
   @doc """
   Turn a `t:Prefix.t/0` into a radix key.
 
@@ -770,7 +774,7 @@ defmodule Iptrie do
     |> size()
   end
 
-  # Addresses
+  # IPv6 Addresses
   # - https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
   # - https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
   # - https://en.wikipedia.org/wiki/IPv6_address

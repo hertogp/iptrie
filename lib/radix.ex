@@ -470,7 +470,8 @@ defmodule Radix do
   end
 
   def rpm({b, l, r}, key) do
-    # when bit b is zero, right subtree might hold longer keys that key as a prefix
+    # when bit b is zero, right subtree might hold longer keys that have key as a prefix
+    # TODO: optimize; only call rpm(r,key) when bitpos b > bit_size(key)
     case bit(key, b) do
       0 -> rpm(l, key) ++ rpm(r, key)
       1 -> rpm(r, key)
