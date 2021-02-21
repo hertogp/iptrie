@@ -1,4 +1,6 @@
 defmodule Iptrie do
+  # 10cc
+
   @moduledoc """
   A Key,Value-store for IPv4 and IPv6 networks or addresses with
   longest prefix matching.
@@ -8,7 +10,7 @@ defmodule Iptrie do
       iex> elements = [{"1.1.1.0/24", 24}, {"3.0.0.0/8", 8},
       ...>  {"1.1.1.0/25", "lower"}, {"1.1.1.128/25", "upper"},
       ...>  {"acdc:1975::", "T.N.T"}, {"acdc:1976::", "High Voltage"},
-      ...>  {"abba:1975::", "abba"}, {"abba:1976::", "Arrival"}]
+      ...>  {"10cc:1973::", "10cc"}, {"10cc:1978::", "Bloody Tourist"}]
       iex> ipt = new(elements)
       iex> Iptrie.Dot.write(ipt, "./doc/img/example.dot", "Iptrie")
       :ok
@@ -43,7 +45,7 @@ defmodule Iptrie do
   - "acdc:1976::" or "acdc:1976::/32" as an IPv6 CIDR-string
   - {0xacdc, 0x1976, 0, 0, 0, 0, 0, 0} IPv6 address-tuple
   - {{0xacdc, 0x1976, 0, 0, 0, 0, 0, 0}, 32} IPv6 {address, len}-tuple
-  - %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128} a IPv6 prefix
+  - %Prefix{bits: <<0xacdc::16, 0x1976::16>>, maxlen: 128} an IPv6 prefix
 
   """
   @type prefix :: Prefix.t() | Prefix.IP.address() | Prefix.IP.digits() | String.t()
@@ -777,6 +779,8 @@ defmodule Iptrie do
   # IPv6 Addresses
   # - https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
   # - https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
+  # - https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry-1.csv
+  # - https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry-1.csv
   # - https://en.wikipedia.org/wiki/IPv6_address
   # - https://en.wikipedia.org/wiki/6to4
 

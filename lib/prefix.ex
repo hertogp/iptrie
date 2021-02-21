@@ -84,8 +84,8 @@ defmodule Prefix do
 
   Enumeration yields a list of full-length prefixes.
 
-  A *prefix* also implements the `String.Chars` protocol with some defaults for
-  prefixes that formats maxlen 32 as IPv4, a maxlen of 48  as MAC address and
+  A *Prefix* also implements the `String.Chars` protocol with some defaults for
+  prefixes that formats maxlen 32 as IPv4, a maxlen of 48 as MAC address and
   a maxlen of 128 as IPv6.  Other maxlen's will simply come out as a series of
   8-bit numbers joined by ".".
 
@@ -446,7 +446,7 @@ defmodule Prefix do
   def bits(x, _) when is_exception(x), do: x
   def bits(x, pl), do: error(:bits, {x, pl})
 
-  # helper to joins bits or return any PrefixError argument provided
+  # helper to join bits or return any PrefixError argument provided
   defp joinbitsp(x, _) when is_exception(x), do: x
   defp joinbitsp(_, y) when is_exception(y), do: y
   defp joinbitsp(x, y), do: <<y::bitstring, x::bitstring>>

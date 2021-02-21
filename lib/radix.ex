@@ -382,9 +382,10 @@ defmodule Radix do
 
   # get the longest prefix match for binary key
   # - follow tree path using key and get longest match from the leaf found
-  # - more specific is to the right, less specific is to the left.  So:
-  #   - when left won't provide a match, the right never will either
-  #   - however, if the right won't match, the left might still match
+  # - more specific is to the right, less specific is to the left.
+  # So:
+  # - when left won't provide a match, the right never will either
+  # - however, if the right won't match, the left might still match
   @doc """
   Get the `{k,v}`-pair where `k` is the longest possible prefix of *key*.
 
