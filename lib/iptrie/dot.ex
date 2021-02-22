@@ -1,6 +1,6 @@
 defmodule Iptrie.Dot do
   @moduledoc """
-  Functions to save an Iptrie as a simple graphviz dot file.
+  Save an Iptrie as a simple graphviz dot file.
 
   """
 
@@ -21,15 +21,16 @@ defmodule Iptrie.Dot do
   end
 
   # TODO:
-  # - add toplevel opts as keyword list
+  # - add toplevel opts as keyword list, perhaps an Iptrie with properties
+  #    for drawing and using lpm match?
   # - parameterize the graph options that are now hardcoded, like colors
   # - optionally graph payload instead of key's, perhaps via callback that
-  #   takes a k,v-pair and produces a (short) string?
+  #   takes a k,v-pair and produces a (short) string.
 
   # DUMP
-  # The accumulator holds [ids, nodes, verts]
-  # The radix tree is traversed in post-order, so left/right children are
-  # processed before the internal node itself.
+  # - the accumulator holds [ids, nodes, verts]
+  # - the radix tree is traversed in post-order, so left/right children are
+  #    processed before the internal node itself.
   # A leaf:
   # - adds a node to nodes (id = length of nodes)
   # - adds the node's id to ids
@@ -82,10 +83,7 @@ defmodule Iptrie.Dot do
     [[id | ids], [node | nodes], verts]
   end
 
-  # TODO:
-  #  add opts to color specific key(s) differently
-  #  - perhaps an Iptrie with properties for drawing and using lpm match
-  def dotify(tree, title) do
+  defp dotify(tree, title) do
     [_ids, nodes, verts] =
       Radix.traverse(tree, fn n, x -> dump(n, x) end, [[], [], []], :postorder)
 
@@ -105,6 +103,10 @@ defmodule Iptrie.Dot do
   end
 
   def write(bst, fname, title \\ "Iptrie") do
-    File.write(fname, dotify(bst.root, title))
+    # File.write(fname, dotify(bst.root, title))
+
+    bst.root
+    |> dotify(title)
+    |> (&File.write(fname, &1)).()
   end
 end

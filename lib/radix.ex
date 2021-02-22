@@ -389,7 +389,6 @@ defmodule Radix do
   @doc """
   Get the `{k,v}`-pair where `k` is the longest possible prefix of *key*.
 
-
   ## Example
 
       iex> elms = [{<<1, 1>>, 16}, {<<1, 1, 0>>, 24}, {<<1, 1, 0, 0::1>>, 25}]
