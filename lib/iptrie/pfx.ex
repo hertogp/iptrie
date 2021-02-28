@@ -519,6 +519,8 @@ defmodule Iptrie.Pfx do
 
   """
   def unique_local?(prefix) do
+    # so what about the well-known nat64 address(es) that are used only
+    # locally?
     x = encode(prefix)
 
     cond do
