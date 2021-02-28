@@ -453,7 +453,26 @@ defmodule Iptrie.Pfx do
   - `0.0.0.0/8`,          [rfc1122](https://tools.ietf.org/html/rfc1122), this-network (link)
   - `255.255.255.255/32`, [rfc1f22](https://www.iana.org/go/rfc1122), limited broadcast
   - `169.254.0.0/16`,     [rfc3927](https://www.iana.org/go/rfc3927), link-local
-  - `fe80::/16`,          [rfc4291](https://tools.ietf.org/html/rfc4291), link-local
+  - `fe80::/64`,          [rfc4291](https://tools.ietf.org/html/rfc4291), link-local
+
+  ## Examples
+
+      # first 256 addresses are reserved
+      iex> link_local?("169.254.0.0")
+      false
+
+      # last 256 addresses are reserved
+      iex> link_local?("169.254.255.0")
+      false
+
+      iex> link_local?("0.0.0.0")
+      true
+
+      iex> link_local?("0.255.255.255")
+      true
+
+      iex> link_local?("fe80::acdc:1975")
+      true
 
   """
   @spec link_local?(prefix | PrefixError.t()) :: boolean
@@ -486,21 +505,21 @@ defmodule Iptrie.Pfx do
       iex> x = link_local("169.254.128.233")
       iex> x
       %{ digits: {169, 254, 128, 233},
-         network: "169.254.0.0/16",
+         prefix: "169.254.0.0/16",
          ifaceID: 33001,
-         prefix: "169.254.128.233"
+         address: "169.254.128.233"
       }
-      iex> host(x.network, x.ifaceID)
+      iex> host(x.prefix, x.ifaceID)
       "169.254.128.233"
 
       iex> y = link_local("fe80::acdc:1976")
       iex> y
       %{ preamble: 1018,
-         network: "fe80::/64",
+         prefix: "fe80::/64",
          ifaceID: 2900105590,
-         prefix: "fe80::acdc:1976"
+         address: "fe80::acdc:1976"
       }
-      iex> host(y.network, y.ifaceID)
+      iex> host(y.prefix, y.ifaceID)
       "fe80::acdc:1976"
 
   """
@@ -513,17 +532,17 @@ defmodule Iptrie.Pfx do
         128 ->
           %{
             preamble: cut(x, 0, 10) |> cast(),
-            network: %Prefix{bits: bits(x, 0, 64), maxlen: 128} |> decode(),
+            prefix: %Prefix{bits: bits(x, 0, 64), maxlen: 128} |> decode(),
             ifaceID: cut(x, 64, 64) |> cast(),
-            prefix: prefix
+            address: prefix
           }
 
         32 ->
           %{
             digits: digits(x, 8) |> elem(0),
-            network: %Prefix{bits: bits(x, 0, 16), maxlen: 32} |> decode(),
+            prefix: %Prefix{bits: bits(x, 0, 16), maxlen: 32} |> decode(),
             ifaceID: cut(x, 16, 16) |> cast(),
-            prefix: prefix
+            address: prefix
           }
       end
     end
@@ -569,6 +588,8 @@ defmodule Iptrie.Pfx do
   Returns true if *prefix* is matched by the Well-Known Prefixes defined in
   [rfc6053](https://www.iana.org/go/rfc6052) and
   [rfc8215](https://www.iana.org/go/rfc8215), false otherwise.
+
+  Note that organisation specific prefixes might still be used for nat64.
 
   ## Example
 
@@ -720,6 +741,57 @@ defmodule Iptrie.Pfx do
       ip6
     end
     |> decode()
+  end
+
+  @doc """
+  Return a DNS pointer record for given *prefix*.
+
+  The prefix will be padded right with `0`-bits to a multiple of 8 for IPv4 prefixes and
+  to a multiple of 4 for IPv6 prefixes.  Note that this might give unexpected results.
+  So `dns_ptr/1` works best if the prefix given is actually a multiple of 4 or 8.
+
+  If the given *prefix* is invalid, a `t:PrefixError/0` is returned instead.
+
+  ## Examples
+
+      iex> dns_ptr("10.10.0.0/16")
+      "10.10.in-addr.arpa"
+
+      # "1.2.3.0/23" actually encodes as %Prefix{bits: <<1, 2, 1::size(7)>>, maxlen: 32}
+      iex> dns_ptr("1.2.3.0/23")
+      "2.2.1.in-addr.arpa"
+
+      iex> dns_ptr("acdc:1976::/32")
+      "6.7.9.1.c.d.c.a.ip6.arpa"
+
+      iex> dns_ptr("acdc:1976::")
+      "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.6.7.9.1.c.d.c.a.ip6.arpa"
+
+  """
+  @spec dns_ptr(prefix()) :: String.t() | PrefixError.t()
+  def dns_ptr(prefix) do
+    case encode(prefix) do
+      x when is_exception(x) -> x
+      x when x.maxlen == 32 -> dns_ptrp(x, 8)
+      x when x.maxlen == 128 -> dns_ptrp(x, 4)
+      _ -> error(:dns_ptr, "expected IPv4/6 prefix, not: #{inspect(prefix)}")
+    end
+  end
+
+  defp dns_ptrp(prefix, size) do
+    n = rem(prefix.maxlen - bit_size(prefix.bits), size)
+
+    {base, suffix} =
+      case size do
+        8 -> {10, "in-addr.arpa"}
+        4 -> {16, "ip6.arpa"}
+      end
+
+    prefix
+    |> padr(0, n)
+    |> format(width: size, base: base, padding: false, reverse: true, mask: false)
+    |> String.downcase()
+    |> (&"#{&1}.#{suffix}").()
   end
 
   # TODO

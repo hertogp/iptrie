@@ -1199,7 +1199,7 @@ defmodule Prefix do
       ...> |> (fn x -> "#{x}.ip6.arpa." end).()
       "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.6.7.9.1.c.d.c.a.ip6.arpa."
 
-      # turn off padding to get reverse zone ptr record
+      # turn off padding to get reverse zone dns ptr record
       iex> new(<<10, 11, 12>>, 32)
       ...> |> format(padding: false, reverse: true, mask: false)
       ...> |> (&"#{&1}.in-addr.arpa.").()
