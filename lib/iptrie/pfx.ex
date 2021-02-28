@@ -9,7 +9,14 @@ defmodule Iptrie.Pfx do
   defdelegate encode(prefix), to: Prefix.IP
   defdelegate decode(prefix), to: Prefix.IP
 
+  @compile [:inline, 2]
+  defp error(id, detail),
+    do: %PrefixError{id: id, detail: detail}
+
   @type prefix :: Prefix.t() | Prefix.IP.address() | Prefix.IP.digits() | String.t()
+
+  # valid prefix lengths to use for nat64
+  @nat64_lengths [96, 64, 56, 48, 40, 32]
 
   @doc """
   Return the this-network address in CIDR-notation for given *prefix*.
@@ -442,10 +449,12 @@ defmodule Iptrie.Pfx do
   Returns true if *prefix* is a link-local prefix, false otherwise
 
   Link local prefixes include:
-  - 0.0.0.0/8, [rfc1122](https://tools.ietf.org/html/rfc1122) -> this-network (link)
-  - 255.255.255.255/32, [rfc1f22](https://www.iana.org/go/rfc1122), limited broadcast
-  - 169.254.0.0/16, [rfc3927](https://www.iana.org/go/rfc3927) -> link-local
-  - fe80::/16, [rfc4291](https://tools.ietf.org/html/rfc4291) -> link-local
+
+  - `0.0.0.0/8`,          [rfc1122](https://tools.ietf.org/html/rfc1122), this-network (link)
+  - `255.255.255.255/32`, [rfc1f22](https://www.iana.org/go/rfc1122), limited broadcast
+  - `169.254.0.0/16`,     [rfc3927](https://www.iana.org/go/rfc3927), link-local
+  - `fe80::/16`,          [rfc4291](https://tools.ietf.org/html/rfc4291), link-local
+
   """
   @spec link_local?(prefix | PrefixError.t()) :: boolean
   def link_local?(prefix) do
@@ -454,6 +463,8 @@ defmodule Iptrie.Pfx do
     x = encode(prefix)
 
     cond do
+      member?(x, %Prefix{bits: <<169, 254, 0>>, maxlen: 32}) -> false
+      member?(x, %Prefix{bits: <<169, 254, 255>>, maxlen: 32}) -> false
       member?(x, %Prefix{bits: <<169, 254>>, maxlen: 32}) -> true
       member?(x, %Prefix{bits: <<0>>, maxlen: 32}) -> true
       member?(x, %Prefix{bits: <<255, 255, 255, 255>>, maxlen: 32}) -> true
@@ -468,8 +479,30 @@ defmodule Iptrie.Pfx do
   Returns nil if *prefix* is not link-local or simply invalid.
 
   See:
-  - https://www.iana.org/go/rfc3927
-  - 
+  - [rfc3927](https://www.iana.org/go/rfc3927)
+
+  ## Examples
+
+      iex> x = link_local("169.254.128.233")
+      iex> x
+      %{ digits: {169, 254, 128, 233},
+         network: "169.254.0.0/16",
+         ifaceID: 33001,
+         prefix: "169.254.128.233"
+      }
+      iex> host(x.network, x.ifaceID)
+      "169.254.128.233"
+
+      iex> y = link_local("fe80::acdc:1976")
+      iex> y
+      %{ preamble: 1018,
+         network: "fe80::/64",
+         ifaceID: 2900105590,
+         prefix: "fe80::acdc:1976"
+      }
+      iex> host(y.network, y.ifaceID)
+      "fe80::acdc:1976"
+
   """
   @spec link_local(prefix) :: map | nil
   def link_local(prefix) do
@@ -481,7 +514,7 @@ defmodule Iptrie.Pfx do
           %{
             preamble: cut(x, 0, 10) |> cast(),
             network: %Prefix{bits: bits(x, 0, 64), maxlen: 128} |> decode(),
-            interfaceID: bits(x, 64, 64),
+            ifaceID: cut(x, 64, 64) |> cast(),
             prefix: prefix
           }
 
@@ -489,7 +522,7 @@ defmodule Iptrie.Pfx do
           %{
             digits: digits(x, 8) |> elem(0),
             network: %Prefix{bits: bits(x, 0, 16), maxlen: 32} |> decode(),
-            hostID: bits(x, 16, 16),
+            ifaceID: cut(x, 16, 16) |> cast(),
             prefix: prefix
           }
       end
@@ -533,8 +566,8 @@ defmodule Iptrie.Pfx do
   end
 
   @doc """
-  Returns true if *prefix* is matched by the Well-Known Prefixes as per
-  [rfc6052](https://www.iana.org/go/rfc6052) and/or
+  Returns true if *prefix* is matched by the Well-Known Prefixes defined in
+  [rfc6053](https://www.iana.org/go/rfc6052) and
   [rfc8215](https://www.iana.org/go/rfc8215), false otherwise.
 
   ## Example
@@ -555,92 +588,138 @@ defmodule Iptrie.Pfx do
   end
 
   @doc """
-  Return a map with ipv6 *prefix* and embedded *ipv4* address.
+  Return the embedded IPv4 address.
 
-  Returns nil if the *prefix* given is not a full IPv6 address (or simply invalid)
-  or *plen* is not one of: 32, 40, 48, 56, 64, or 96.
+  The *ip6* prefix should be a full IPv6 address.  The *len* defaults to `96`, but if
+  specified it should be one of [#{Enum.join(@nat64_lengths, ", ")}].
 
-  *plen* defaults to `96`, but is also auto-corrected to either 96 or 48 if the
-  *prefix* given is either the Well-Known prefix of
-  [rfc6052](https://www.iana.org/go/rfc6052) or the Well-Known prefix of
-  [rfc8215](https://www.iana.org/go/rfc8215).  Otherwise the *plen* must be
-  specified for Network Specific prefixes.
+  ## Examples
 
-  ## Example
+      iex> nat64_decode("64:ff9b::10.10.10.10")
+      "10.10.10.10"
 
-      iex> nat64("64:ff9b::10.10.10.10")
-      %{prefix: "64:ff9b::/96", ipv4: "10.10.10.10"}
+      iex> nat64_decode("64:ff9b:1:0a0a:000a:0a00::", 48)
+      "10.10.10.10"
 
-      # auto-correct plen for Well-Known prefix
-      iex> nat64("64:ff9b::10.10.10.10", 48)
-      %{prefix: "64:ff9b::/96", ipv4: "10.10.10.10"}
+      # from rfc6052, section 2.4
 
-      iex> nat64("64:ff9b:1:0a0a:000a:0a00::")
-      %{prefix: "64:ff9b:1::/48", ipv4: "10.10.10.10"}
+      iex> nat64_decode("2001:db8:c000:221::", 32)
+      "192.0.2.33"
 
-      # examples from rfc6052, section 2.4
+      iex> nat64_decode("2001:db8:1c0:2:21::", 40)
+      "192.0.2.33"
 
-      iex> nat64("2001:db8:c000:221::", 32)
-      %{prefix: "2001:db8::/32", ipv4: "192.0.2.33"}
+      iex> nat64_decode("2001:db8:122:c000:2:2100::", 48)
+      "192.0.2.33"
 
-      iex> nat64("2001:db8:1c0:2:21::", 40)
-      %{prefix: "2001:db8:100::/40", ipv4: "192.0.2.33"}
+      iex> nat64_decode("2001:db8:122:3c0:0:221::", 56)
+      "192.0.2.33"
 
-      iex> nat64("2001:db8:122:c000:2:2100::", 48)
-      %{prefix: "2001:db8:122::/48", ipv4: "192.0.2.33"}
+      iex> nat64_decode("2001:db8:122:344:c0:2:2100::", 64)
+      "192.0.2.33"
 
-      iex> nat64("2001:db8:122:3c0:0:221::", 56)
-      %{prefix: "2001:db8:122:300::/56", ipv4: "192.0.2.33"}
+      iex> nat64_decode("2001:db8:122:344::192.0.2.33", 96)
+      "192.0.2.33"
 
-      iex> nat64("2001:db8:122:344:c0:2:2100::", 64)
-      %{prefix: "2001:db8:122:344::/64", ipv4: "192.0.2.33"}
-
-      iex> nat64("2001:db8:122:344::192.0.2.33", 96)
-      %{prefix: "2001:db8:122:344::/96", ipv4: "192.0.2.33"}
-
-      # legal lengths are 96, 64, 56, 48, 40 and 32
-      iex> nat64("2001:db8:122:344::192.0.2.33", 90)
-      nil
+      iex> nat64_decode("2001:db8:122:344::192.0.2.33", 90)
+      %PrefixError{
+        id: :nat64_decode,
+        detail: "length 90 not in: [96, 64, 56, 48, 40, 32]"}
 
   """
-  @spec nat64(prefix(), pos_integer) :: map | nil
-  def nat64(prefix, plen \\ 96) do
-    prefix
-    |> encode()
-    |> nat64p(plen)
+  @spec nat64_decode(prefix(), integer) :: String.t() | PrefixError.t()
+  def nat64_decode(ip6, len \\ 96)
+
+  def nat64_decode(ip6, len) when len in @nat64_lengths do
+    case encode(ip6) do
+      p6 when is_exception(p6) -> p6
+      p6 when bit_size(p6.bits) == 128 -> nat64_decodep(p6, len)
+      _ -> error(:nat64_decode, "expected a full ipv6 address, got #{inspect(ip6)}")
+    end
   end
 
-  defp nat64p(x, _) when is_exception(x), do: nil
+  def nat64_decode(_, len),
+    do: error(:nat64_decode, "length #{len} not in: [#{Enum.join(@nat64_lengths, ", ")}]")
 
-  defp nat64p(x, l) when l in [96, 64, 56, 48, 40, 32] and bit_size(x.bits) == 128 do
-    # auto-correct plen's value for Well-Known prefixes of rfc6052 or rfc8215
-    plen =
-      cond do
-        member?(x, %Prefix{bits: <<0x0064::16, 0xFF9B::16, 0::64>>, maxlen: 128}) -> 96
-        member?(x, %Prefix{bits: <<0x0064::16, 0xFF9B::16, 1::16>>, maxlen: 128}) -> 48
-        true -> l
-      end
+  defp nat64_decodep(ip6, len) do
+    ip6 = if len < 96, do: %{ip6 | bits: bits(ip6, [{0, 64}, {72, 56}])}, else: ip6
 
-    x = if plen < 96, do: %{x | bits: bits(x, [{0, 64}, {72, 56}])}, else: x
-
-    %{
-      prefix: %Prefix{bits: bits(x, 0, plen), maxlen: 128} |> decode(),
-      ipv4: %Prefix{bits: bits(x, plen, 32), maxlen: 32} |> decode()
-    }
+    %Prefix{bits: bits(ip6, len, 32), maxlen: 32}
+    |> decode()
   end
 
-  defp nat64p(_, _), do: nil
-
-  @spec nat46(prefix(), prefix()) :: String.t() | PrefixError.t()
   @doc """
-  Return the IPv4-embedded IPv6 address or nil in case of errors.
+  Return the IPv4 embedded IPv6 address.
+
+  The IPv6 prefix' length should be one of [#{Enum.join(@nat64_lengths, ", ")}] as defined
+  in [rfc6052](https://www.iana.org/go/rfc6052).  The IPv4 prefix should be a full address.
+  Anything else will yield a `t:PrefixError/0`
+
+  ## Examples
+
+      # from rfc6052, section 2.2
+
+      iex> nat64_encode("2001:db8::/32", "192.0.2.33")
+      "2001:db8:c000:221::"
+
+      iex> nat64_encode("2001:db8:100::/40", "192.0.2.33")
+      "2001:db8:1c0:2:21::"
+
+      iex> nat64_encode("2001:db8:122::/48", "192.0.2.33")
+      "2001:db8:122:c000:2:2100::"
+
+      iex> nat64_encode("2001:db8:122:300::/56", "192.0.2.33")
+      "2001:db8:122:3c0:0:221::"
+
+      # result is same as 2001:db8:122:344:c0:2:2100::
+      iex> nat64_encode("2001:db8:122:344::/64", "192.0.2.33")
+      "2001:db8:122:344:c0:2:2100:0"
+
+      iex> nat64_encode("2001:db8:122:344::/96", "192.0.2.33")
+      "2001:db8:122:344::c000:221"
 
   """
-  def nat46(ip6, _ip4) when is_exception(ip6), do: ip6
-  def nat46(_ip6, ip4) when is_exception(ip4), do: ip4
+  @spec nat64_encode(prefix(), prefix()) :: String.t() | PrefixError.t()
+  def nat64_encode(ip6, ip4) do
+    case {encode(ip6), encode(ip4)} do
+      {p6, _} when is_exception(p6) ->
+        p6
 
-  def nat46(prefix, ip4) do
-    "" <> prefix <> ip4
+      {_, p4} when is_exception(p4) ->
+        p4
+
+      {p6, _} when p6.maxlen != 128 ->
+        error(:nat64_encode, "not IPv6: #{inspect(ip6)}")
+
+      {_, p4} when p4.maxlen != 32 ->
+        error(:nat64_encode, "Not ipv4: #{inspect(ip4)}")
+
+      {p6, _} when bit_size(p6.bits) not in @nat64_lengths ->
+        error(:nat64_encode, "Illegal IPv6 prefix length: #{inspect(ip6)}")
+
+      {_, p4} when bit_size(p4.bits) != 32 ->
+        error(:nat64_encode, "Expected a full ipv4 address, not #{inspect(ip4)}")
+
+      {p6, p4} ->
+        nat64_encodep(p6, p4)
+    end
+  end
+
+  defp nat64_encodep(ip6, ip4) do
+    ip6 = %{ip6 | bits: ip6.bits <> ip4.bits}
+
+    if bit_size(ip6.bits) < 128 do
+      %{
+        ip6
+        | bits:
+            <<bits(ip6, [{0, 64}])::bitstring, 0::8,
+              bits(ip6, [{64, bit_size(ip6.bits) - 64}])::bitstring>>
+      }
+      |> padr(0)
+    else
+      ip6
+    end
+    |> decode()
   end
 
   # TODO
