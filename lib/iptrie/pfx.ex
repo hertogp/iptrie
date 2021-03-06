@@ -104,6 +104,37 @@ defmodule Iptrie.Pfx do
   end
 
   @doc """
+  Return the host address for the *nth*-member of the prefix.
+
+  This will wrap around the available address space without warning.
+
+  ## Examples
+
+      iex> host("1.1.1.0/24", 129)
+      "1.1.1.129"
+
+      iex> host("1.1.1.0/24", 256)
+      "1.1.1.0"
+
+      iex> host({{1, 1, 1, 0}, 24}, 128)
+      "1.1.1.128"
+
+      iex> host(%Prefix{bits: <<1, 1, 1>>, maxlen:  32}, 128)
+      "1.1.1.128"
+
+      iex> host("1.1.1.0/33", 1)
+      %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
+
+  """
+  @spec host(prefix(), integer) :: String.t() | PrefixError.t()
+  def host(prefix, nth) do
+    prefix
+    |> encode()
+    |> member(nth)
+    |> decode()
+  end
+
+  @doc """
   Returns the mask for given prefix.
 
   ## Examples
@@ -246,37 +277,6 @@ defmodule Iptrie.Pfx do
     prefix
     |> encode()
     |> sibling(n)
-    |> decode()
-  end
-
-  @doc """
-  Return the host address for the *nth*-member of the prefix.
-
-  This will wrap around the available address space without warning.
-
-  ## Examples
-
-      iex> host("1.1.1.0/24", 129)
-      "1.1.1.129"
-
-      iex> host("1.1.1.0/24", 256)
-      "1.1.1.0"
-
-      iex> host({{1, 1, 1, 0}, 24}, 128)
-      "1.1.1.128"
-
-      iex> host(%Prefix{bits: <<1, 1, 1>>, maxlen:  32}, 128)
-      "1.1.1.128"
-
-      iex> host("1.1.1.0/33", 1)
-      %PrefixError{id: :encode, detail: {{1, 1, 1, 0}, 33}}
-
-  """
-  @spec host(prefix(), integer) :: String.t() | PrefixError.t()
-  def host(prefix, nth) do
-    prefix
-    |> encode()
-    |> member(nth)
     |> decode()
   end
 
@@ -692,7 +692,7 @@ defmodule Iptrie.Pfx do
       iex> nat64_encode("2001:db8:122:300::/56", "192.0.2.33")
       "2001:db8:122:3c0:0:221::"
 
-      # result is same as 2001:db8:122:344:c0:2:2100::
+      # :inet.ntoa doesn't seem to reduce trailing zeros of the last quibble to '::'
       iex> nat64_encode("2001:db8:122:344::/64", "192.0.2.33")
       "2001:db8:122:344:c0:2:2100:0"
 
@@ -744,7 +744,42 @@ defmodule Iptrie.Pfx do
   end
 
   @doc """
-  Return a DNS pointer record for given *prefix*.
+  Return the 6to4 IPv6 address, given an IPv4 address.
+
+  [rfc3056](Thttps://tools.ietf.org/html/rfc3056#section-2) specifies the following:
+
+  ```
+  | 0x2002::16 | V4ADDR::32 | SLA_ID::16 | Interface_ID::64 |
+  ```
+
+  where,
+  - 2002::/16 is the ip6to4 prefix
+  - VADDR/32 is the global unique IPv4 address associated with the IPv6 tunnel host
+
+
+  TODO:
+  o 6to4 isn't used anymore?
+  o what is the correct encoding, since not everybody puts in the ip4 twice!
+
+  ## Examples
+
+      iex> ip6to4_encode("1.2.3.4")
+      "2002:102:304::102:304"
+
+  """
+  def ip6to4_encode(ip4) do
+    ip4 = encode(ip4)
+
+    ip6 =
+      %Prefix{bits: <<0x2002::16, ip4.bits::bitstring>>, maxlen: 128}
+      |> padr(0, 48)
+
+    %{ip6 | bits: <<ip6.bits::bitstring, ip4.bits::bitstring>>}
+    |> decode()
+  end
+
+  @doc """
+  Return a reverse DNS name (pointer) for given *prefix*.
 
   The prefix will be padded right with `0`-bits to a multiple of 8 for IPv4 prefixes and
   to a multiple of 4 for IPv6 prefixes.  Note that this might give unexpected results.
@@ -758,14 +793,16 @@ defmodule Iptrie.Pfx do
       "10.10.in-addr.arpa"
 
       # "1.2.3.0/23" actually encodes as %Prefix{bits: <<1, 2, 1::size(7)>>, maxlen: 32}
+      # and padding right with 0-bits to a /24 yields the 1.2.2.0/24 ...
       iex> dns_ptr("1.2.3.0/23")
       "2.2.1.in-addr.arpa"
 
       iex> dns_ptr("acdc:1976::/32")
       "6.7.9.1.c.d.c.a.ip6.arpa"
 
-      iex> dns_ptr("acdc:1976::")
-      "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.6.7.9.1.c.d.c.a.ip6.arpa"
+      # https://www.youtube.com/watch?v=VD7BV-z5GsE
+      iex> dns_ptr("acdc:1975::b1ba:2021")
+      "1.2.0.2.a.b.1.b.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.5.7.9.1.c.d.c.a.ip6.arpa"
 
   """
   @spec dns_ptr(prefix()) :: String.t() | PrefixError.t()
@@ -795,11 +832,11 @@ defmodule Iptrie.Pfx do
   end
 
   # TODO
-  #
+  # o 6to4 https://tools.ietf.org/html/rfc3056
+  # o ::ffff:0:0/96 https://tools.ietf.org/html/rfc4291, section 2.2 & 2.5.5 (https://tools.ietf.org/html/rfc4038)
   # o hosts_lazy :: return stream that returns hosts addresses
   # o map_lazy?
   # o Enumerable for Iptrie?
-  # o dns_ptr(prefix) -> reverse dns name
   # o read/write an Iptrie from/to file?
   #
   # See also:

@@ -18,5 +18,5 @@ def deps do
 end
 ```
 
-Repositiory is on [github](https://https://github.com/hertogp/iptrie).
+Repositiory is on [github](https://github.com/hertogp/iptrie).
 
