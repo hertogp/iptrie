@@ -22,7 +22,7 @@ defmodule Iptrie do
   ## Example
 
       iex> Iptrie.new()
-      %Iptrie{root: {0, nil, nil}}
+      %Iptrie{root: %{}}
 
   """
   @spec new() :: t()
