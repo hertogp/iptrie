@@ -11,26 +11,27 @@ defmodule Iptrie do
   defstruct []
 
   @typedoc """
-  An Iptrie struct that contains a `Radix` tree per `maxlen` used.
+  An Iptrie struct that contains a `Radix` tree per type of `t:Pfx.t/0` used.
 
-  See `t:Pfx.t/0` and `t:Radix.tree/0`.
+  A [prefix'](`Pfx`) _type_ is determined by its `maxlen` property: IPv4 has `maxlen:
+  32`, IPv6 has `maxlen: 128`, MAC addresses have `maxlen: 48` and so on.
+
+  Although Iptrie facilitates lpm lookups of any type of prefix, it has a bias
+  towards IP prefixes. So, any binaries (strings) are interpreted as
+  CIDR-strings and tuples of address digits and/or {address-digits, length) are
+  interpreted as IPv4 or IPv6 representations.
 
   """
   @type t :: %__MODULE__{}
 
+  @typedoc """
+  A prefix represented as an opague `t:Pfx.t/0` struct, an
+  `t:Pfx.ip_address/0`, `t:Pfx.ip_prefix/0` or CIDR string.
+
+  See: `Pfx`.
+
+  """
   @type prefix :: Pfx.prefix()
-
-  # Helpers
-  defp marshall(pfx, x) when Pfx.is_pfx(pfx) do
-    width = if pfx.maxlen == 128, do: 16, else: 8
-
-    cond do
-      is_binary(x) -> "#{pfx}"
-      is_tuple(x) and tuple_size(x) == 2 -> Pfx.digits(pfx, width)
-      is_tuple(x) -> Pfx.digits(pfx, width) |> elem(0)
-      true -> pfx
-    end
-  end
 
   @doc """
   Create an new, empty Iptrie.
@@ -47,7 +48,7 @@ defmodule Iptrie do
     do: %__MODULE__{}
 
   @doc """
-  Create a new `t:Iptrie/0` populated via a list of {`t:Pfx.t/0`, `any`}-pairs.
+  Create a new `t:Iptrie.t/0` populated via a list of {`t:prefix/0`, `t:any/0`}-pairs.
 
   ## Example
 
@@ -89,7 +90,7 @@ defmodule Iptrie do
 
       case Radix.get(tree, pfx.bits) do
         nil -> nil
-        {bits, value} -> {marshall(%{pfx | bits: bits}, prefix), value}
+        {bits, value} -> {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
       end
     rescue
       ArgumentError -> nil
@@ -122,6 +123,61 @@ defmodule Iptrie do
   end
 
   @doc """
+  Delete one or more entries from an Iptrie.
+
+  The list of prefixes to delete can be mixed, so all sorts of prefixes can be
+  deleted from multiple radix trees in one go.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", "one")
+      ...> |> put("2.2.2.0/24", "two")
+      iex>
+      iex> lookup(ipt, "1.1.1.1")
+      {"1.1.1.0/24", "one"}
+      iex>
+      iex> Map.get(ipt, 32) |> Radix.keys()
+      [<<1, 1, 1>>, <<2, 2, 2>>]
+      iex>
+      iex> ipt = delete(ipt, "1.1.1.0/24")
+      iex>
+      iex> lookup(ipt, "1.1.1.1")
+      nil
+      iex>
+      iex> Map.get(ipt, 32) |> Radix.keys()
+      [<<2, 2, 2>>]
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", "one")
+      ...> |> put("2.2.2.0/24", "two")
+      ...> |> put("abba:1973::/32", "Ring Ring")
+      ...> |> put("acdc:1975::/32", "T.N.T")
+      iex>
+      iex> ipt = delete(ipt, ["1.1.1.0/24", "abba:1973::/32"])
+      iex>
+      iex> Map.get(ipt, 32) |> Radix.keys()
+      [<<2, 2, 2>>]
+      iex>
+      iex> Map.get(ipt, 128) |> Radix.keys()
+      [<<0xacdc::16, 0x1975::16>>]
+
+  """
+  @spec delete(t, prefix) :: t
+  def delete(%__MODULE__{} = trie, prefixes) when is_list(prefixes),
+    do: Enum.reduce(prefixes, trie, fn pfx, trie -> delete(trie, pfx) end)
+
+  def delete(%__MODULE__{} = trie, prefix) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = Map.get(trie, pfx.maxlen)
+      Map.put(trie, pfx.maxlen, Radix.delete(tree, pfx.bits))
+    rescue
+      ArgumentError -> trie
+    end
+  end
+
+  @doc """
   Return the `t:prefix.t/0`,value--pair, whose key represents the longest possible
   prefix for the given search *prefix* or `nil` if nothing matched.
 
@@ -138,7 +194,100 @@ defmodule Iptrie do
 
       case Radix.lookup(tree, pfx.bits) do
         nil -> nil
-        {bits, value} -> {marshall(%{pfx | bits: bits}, prefix), value}
+        {bits, value} -> {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
+      end
+    rescue
+      ArgumentError -> nil
+    end
+  end
+
+  @doc """
+  Return all the `t:prefix.t/0`,value--pairs where the given search `prefix` is
+  a prefix for the stored radix key.
+
+  Note that any bitstring is always a prefix of itself.  So, if present, the
+  search key will be included in the result.
+
+  If `prefix` is not valid, or cannot be encoded as an Ipv4 op IPv6 `Pfx`, nil
+  is returned.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/25", "A25-lower")
+      ...> |> put("1.1.1.128/25", "A25-upper")
+      ...> |> put("1.1.1.0/30", "A30")
+      ...> |> put("1.1.2.0/24", "B24")
+      iex>
+      iex> more(ipt, "1.1.1.0/24")
+      [
+        {"1.1.1.0/30", "A30"},
+        {"1.1.1.0/25", "A25-lower"},
+        {"1.1.1.128/25", "A25-upper"}
+      ]
+
+  """
+  @spec more(t(), prefix()) :: {prefix(), any} | nil
+  def more(%__MODULE__{} = trie, prefix) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = Map.get(trie, pfx.maxlen) || Radix.new()
+
+      case Radix.more(tree, pfx.bits) do
+        nil ->
+          nil
+
+        list ->
+          Enum.map(list, fn {bits, value} ->
+            {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
+          end)
+      end
+    rescue
+      ArgumentError -> nil
+    end
+  end
+
+  @doc """
+  Return all the `t:prefix.t/0`,value--pairs whose `t:prefix.t/0` bits are a
+  prefix to given search `prefix`.
+
+  Note that any bitstring is always a prefix of itself.  So, if present, the
+  search key will be included in the result.
+
+  If `prefix` is not present or not valid, or cannot be encoded as an Ipv4 op
+  IPv6 `Pfx`, an empty list is returned.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/25", "A25-lower")
+      ...> |> put("1.1.1.128/25", "A25-upper")
+      ...> |> put("1.1.1.0/30", "A30")
+      ...> |> put("1.1.2.0/24", "B24")
+      iex>
+      iex> less(ipt, "1.1.1.0/30")
+      [
+        {"1.1.1.0/30", "A30"},
+        {"1.1.1.0/25", "A25-lower"},
+      ]
+      iex> less(ipt, "2.2.2.2")
+      []
+
+  """
+  @spec less(t(), prefix()) :: {prefix(), any} | nil
+  def less(%__MODULE__{} = trie, prefix) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = Map.get(trie, pfx.maxlen) || Radix.new()
+
+      case Radix.less(tree, pfx.bits) do
+        nil ->
+          nil
+
+        list ->
+          Enum.map(list, fn {bits, value} ->
+            {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
+          end)
       end
     rescue
       ArgumentError -> nil

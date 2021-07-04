@@ -17,13 +17,13 @@ defmodule Iptrie.MixProject do
     [
       app: :iptrie,
       version: @version,
+      elixir: "~> 1.11",
       name: "Iptrie",
       description: "A longest prefix match IP lookup for IPv4, IPv6 prefixes (and others)",
-      elixir: "~> 1.11",
       deps: deps(),
       docs: docs(),
-      aliases: aliases(),
       package: package()
+      # aliases: aliases()
     ]
   end
 
@@ -35,27 +35,8 @@ defmodule Iptrie.MixProject do
   defp docs() do
     [
       main: Iptrie,
-      extras: ["README.md", "CHANGELOG.md"],
-      source_url: @url
-    ]
-  end
-
-  # Run "mix help deps" to learn about dependencies.
-  defp deps do
-    [
-      {:radix, "~> 0.1.1"},
-      {:pfx, "~> 0.2.1"},
-      {:ex_doc, "~> 0.18", only: :dev, runtime: false},
-      {:credo, "~> 0.8", only: [:dev, :test]}
-    ]
-  end
-
-  defp aliases do
-    [
-      docz: [
-        "docs",
-        "cmd $(for f in doc/img/*.dot; do dot -T png ${f} > ${f}.png; done)"
-      ]
+      source_url: @url,
+      extras: ["README.md", "CHANGELOG.md"]
     ]
   end
 
@@ -66,4 +47,18 @@ defmodule Iptrie.MixProject do
       links: %{"GitHub" => @url}
     }
   end
+
+  defp deps do
+    [
+      {:radix, "~> 0.1.1"},
+      {:pfx, "~> 0.2.1"},
+      {:ex_doc, ">= 0.24.0", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.0", only: :dev, runtime: false},
+      {:credo, "~> 0.8", only: [:dev, :test]}
+    ]
+  end
+
+  # defp aliases do
+  #   [docz: ["docs"]]
+  # end
 end
