@@ -48,7 +48,7 @@ defmodule Iptrie do
     do: %__MODULE__{}
 
   @doc """
-  Create a new `t:Iptrie.t/0` populated via a list of {`t:prefix/0`, `t:any/0`}-pairs.
+  Create a new Iptrie, populated via a list of {`t:prefix/0`, `t:any/0`}-pairs.
 
   ## Example
 
@@ -64,7 +64,7 @@ defmodule Iptrie do
     do: Enum.reduce(elements, new(), fn {prefix, value}, trie -> put(trie, prefix, value) end)
 
   @doc """
-  Return the {prefix, value}-pair(s) using an exact match for given prefixes.
+  Return one or more prefix,value-pair(s) using an exact match for given `prefix(es)`.
 
   ## Examples
 
@@ -99,7 +99,7 @@ defmodule Iptrie do
   end
 
   @doc """
-  Populate the trie with a list of {prefix,value}-pairs.
+  Populate the `trie` with a list of {prefix,value}-pairs.
 
   This always uses an exact match for *prefix*, updating its *value* if it
   exists.  Any errors are silently ignored as the trie is always returned.
@@ -118,7 +118,7 @@ defmodule Iptrie do
   end
 
   @doc """
-  Puts `value` under `prefix` in the trie.
+  Puts `value` under `prefix` in the `trie`.
 
   This always uses an exact match for *prefix*, replacing its value if it
   exists.  Any errors are silently ignored as the tree is always returned.
@@ -200,9 +200,92 @@ defmodule Iptrie do
     end
   end
 
-  @doc """
-  Return the prefix,value-pair, whose prefix is the longest match or nil if not found.
+  @doc ~S"""
+  Return the prefixes from the radix trees in `trie` for given `types`.
 
+  Where `types` is a single maxlen or a list thereof.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> keys(ipt, 32)
+      [
+        %Pfx{bits: <<1, 1, 1>>, maxlen: 32},
+        %Pfx{bits: <<2, 2, 2>>, maxlen: 32}
+      ]
+      iex>
+      iex> keys(ipt, 128)
+      [
+        %Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128},
+        %Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}
+      ]
+      iex>
+      iex> keys(ipt, 48)
+      []
+      iex>
+      iex> keys(ipt, [32, 48, 128])
+      [
+        %Pfx{bits: <<1, 1, 1>>, maxlen: 32},
+        %Pfx{bits: <<2, 2, 2>>, maxlen: 32},
+        %Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128},
+        %Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}
+      ]
+
+  """
+  @spec keys(t, integer | list(integer)) :: list(prefix)
+  def keys(%Iptrie{} = trie, maxlen) when is_integer(maxlen) do
+    tree = Map.get(trie, maxlen) || Radix.new()
+
+    tree
+    |> Radix.keys()
+    |> Enum.map(fn bits -> Pfx.new(bits, maxlen) end)
+  end
+
+  def keys(%Iptrie{} = trie, types) when is_list(types) do
+    Enum.map(types, fn maxlen -> keys(trie, maxlen) end)
+    |> List.flatten()
+  end
+
+  @doc ~S"""
+  Return all the prefixes for all available radix trees in `trie`.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> keys(ipt)
+      ...> |> Enum.map(fn x -> "#{x}" end)
+      [
+        "1.1.1.0/24",
+        "2.2.2.0/24",
+        "acdc:1975:0:0:0:0:0:0/32",
+        "acdc:2021:0:0:0:0:0:0/32"
+      ]
+
+  """
+  @spec keys(t) :: list(prefix)
+  def keys(%Iptrie{} = trie) do
+    types =
+      trie
+      |> Map.keys()
+      |> Enum.filter(fn x -> is_integer(x) end)
+
+    keys(trie, types)
+  end
+
+  @doc """
+  Return the prefix,value-pair, whose prefix is the longest match for given search `prefix`.
+
+  Returns nil if there is no match for search `prefix`.  
   Silently ignores any errors when encoding the given search `prefix` by returning nil.
 
   ## Example

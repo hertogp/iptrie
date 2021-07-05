@@ -8,7 +8,7 @@
 
 IP lookup, with longest prefix match, for IPv4, IPv6 prefixes (and others).
 
-Iptrie manages multiple `t:Radix.tree/0` trees, one for each type of
+Iptrie manages multiple `Radix` trees, one for each type of
 `t:Pfx.t/0` prefix used as determined by their `maxlen` property.  That way,
 IPv4 prefixes (`maxlen: 32`) use a different radix tree as opposed to e.g. IPv6
 (`maxlen: 128`).
