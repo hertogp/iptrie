@@ -64,18 +64,19 @@ defmodule Iptrie do
     do: Enum.reduce(elements, new(), fn {prefix, value}, trie -> put(trie, prefix, value) end)
 
   @doc """
-  Return the {key,val}-pair where key is an exact match for given `prefix`,
-  or a list of pairs for a list of prefixes.
+  Return the {prefix, value}-pair(s) using an exact match for given prefixes.
 
   ## Examples
 
       iex> ipt = new([{"1.1.1.0/30", "A"}, {"1.1.1.0/31", "B"}, {"1.1.1.0", "C"}])
+      iex>
       iex> get(ipt, "1.1.1.0/31")
       {"1.1.1.0/31", "B"}
       iex>
-      iex> get(ipt, {{1, 1, 1, 0}, 30})
-      {{{1, 1, 1, 0}, 30}, "A"}
-
+      iex> # or get a list of entries
+      iex>
+      iex> get(ipt, ["1.1.1.0/30", "1.1.1.0"])
+      [{"1.1.1.0/30", "A"}, {"1.1.1.0", "C"}]
 
   """
   @spec get(t, prefix() | list(prefix())) :: {prefix(), any} | nil | list({prefix(), any})
@@ -98,12 +99,17 @@ defmodule Iptrie do
   end
 
   @doc """
-  Enter a single {prefix,value}-pair into an iptrie.
+  Populate the trie with a list of {prefix,value}-pairs.
 
   This always uses an exact match for *prefix*, updating its *value* if it
-  exists.  Any errors are silently ignored as the tree is always returned.
+  exists.  Any errors are silently ignored as the trie is always returned.
 
-  ## Examples
+  ## Example
+
+      iex> ipt = new([{"1.1.1.0/24", 0}, {"1.1.1.1", 0}, {"1.1.1.1", "x"}])
+      iex>
+      iex> get(ipt, "1.1.1.1")
+      {"1.1.1.1", "x"}
 
   """
   @spec put(t, list({prefix(), any})) :: t
@@ -111,6 +117,23 @@ defmodule Iptrie do
     Enum.reduce(elements, trie, fn {k, v}, t -> put(t, k, v) end)
   end
 
+  @doc """
+  Puts `value` under `prefix` in the trie.
+
+  This always uses an exact match for *prefix*, replacing its value if it
+  exists.  Any errors are silently ignored as the tree is always returned.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 0)
+      ...> |> put("1.1.1.1", 1)
+      ...> |> put("1.1.1.1", "x")
+      iex>
+      iex> get(ipt, "1.1.1.1")
+      {"1.1.1.1", "x"}
+
+  """
   @spec put(t, prefix(), any) :: t
   def put(%__MODULE__{} = trie, prefix, value) do
     try do
@@ -123,10 +146,10 @@ defmodule Iptrie do
   end
 
   @doc """
-  Delete one or more entries from an Iptrie.
+  Delete one or more prefix, value-pair(s) from the `trie` using an exact match.
 
-  The list of prefixes to delete can be mixed, so all sorts of prefixes can be
-  deleted from multiple radix trees in one go.
+  The list of prefixes to delete may contains all __types__, so all sorts of
+  prefixes can be deleted from multiple radix trees in one go.
 
   ## Example
 
@@ -178,10 +201,9 @@ defmodule Iptrie do
   end
 
   @doc """
-  Return the `t:prefix.t/0`,value--pair, whose key represents the longest possible
-  prefix for the given search *prefix* or `nil` if nothing matched.
+  Return the prefix,value-pair, whose prefix is the longest match or nil if not found.
 
-  Silently ignores any errors when encoding given *prefix* by returning nil.
+  Silently ignores any errors when encoding the given search `prefix` by returning nil.
 
   ## Example
 
@@ -202,13 +224,14 @@ defmodule Iptrie do
   end
 
   @doc """
-  Return all the `t:prefix.t/0`,value--pairs where the given search `prefix` is
-  a prefix for the stored radix key.
+  Return all the prefix,value-pairs where the search `prefix` is a prefix for
+  the stored prefix.
 
-  Note that any bitstring is always a prefix of itself.  So, if present, the
-  search key will be included in the result.
+  This returns the more specific entries that are enclosed by given search
+  `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
+  present, the search `prefix` will be included in the result.
 
-  If `prefix` is not valid, or cannot be encoded as an Ipv4 op IPv6 `Pfx`, nil
+  If `prefix` is not valid, or cannot be encoded as an Ipv4 op IPv6 `t:Pfx.t`, nil
   is returned.
 
   ## Example
@@ -248,14 +271,15 @@ defmodule Iptrie do
   end
 
   @doc """
-  Return all the `t:prefix.t/0`,value--pairs whose `t:prefix.t/0` bits are a
-  prefix to given search `prefix`.
+  Return all the prefix,value-pairs whose prefix is a prefix for the given
+  search `prefix`.
 
-  Note that any bitstring is always a prefix of itself.  So, if present, the
-  search key will be included in the result.
+  This returns the less specific entries that enclose the given search
+  `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
+  present, the search key will be included in the result.
 
   If `prefix` is not present or not valid, or cannot be encoded as an Ipv4 op
-  IPv6 `Pfx`, an empty list is returned.
+  IPv6 `t:Pfx.t/0`, an empty list is returned.
 
   ## Example
 
@@ -295,7 +319,7 @@ defmodule Iptrie do
   end
 
   @doc """
-  Lookup `prefix` and update its value only if found.
+  Lookup `prefix` and update its value, only if found.
 
   If found, `fun` is called on its value.  If `prefix` is not found,
   the `trie` is returned unchanged.
@@ -329,10 +353,10 @@ defmodule Iptrie do
   end
 
   @doc """
-  Lookup `prefix` and update its value or insert the default.
+  Lookup `prefix` and, if found,  update its value or insert the default.
 
   If `prefix` is found, `fun` is called on its value.  If `prefix` is not
-  in the tree, the default is inserted in which case `fun` is not called.
+  in the tree, the default is inserted and `fun` is not called.
 
   ## Example
 
