@@ -201,9 +201,9 @@ defmodule Iptrie do
   end
 
   @doc ~S"""
-  Return the prefixes from the radix trees in `trie` for given `types`.
+  Return the prefixes from the radix tree(s) in `trie` for given `type`.
 
-  Where `types` is a single maxlen or a list thereof.
+  Where `type` is a single maxlen or a list thereof.
 
   ## Example
 
@@ -238,16 +238,16 @@ defmodule Iptrie do
 
   """
   @spec keys(t, integer | list(integer)) :: list(prefix)
-  def keys(%Iptrie{} = trie, maxlen) when is_integer(maxlen) do
-    tree = Map.get(trie, maxlen) || Radix.new()
+  def keys(%Iptrie{} = trie, type) when is_integer(type) do
+    tree = Map.get(trie, type) || Radix.new()
 
     tree
     |> Radix.keys()
-    |> Enum.map(fn bits -> Pfx.new(bits, maxlen) end)
+    |> Enum.map(fn bits -> Pfx.new(bits, type) end)
   end
 
   def keys(%Iptrie{} = trie, types) when is_list(types) do
-    Enum.map(types, fn maxlen -> keys(trie, maxlen) end)
+    Enum.map(types, fn type -> keys(trie, type) end)
     |> List.flatten()
   end
 
@@ -275,11 +275,71 @@ defmodule Iptrie do
   @spec keys(t) :: list(prefix)
   def keys(%Iptrie{} = trie) do
     types =
-      trie
-      |> Map.keys()
+      Map.keys(trie)
       |> Enum.filter(fn x -> is_integer(x) end)
 
     keys(trie, types)
+  end
+
+  @doc ~S"""
+  Return the values stored in the radix trees in `trie` for given `type`.
+
+  Where `type` is a either single maxlen or a list thereof.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> values(ipt, 32)
+      [1, 2]
+      iex>
+      iex> values(ipt, 128)
+      [3, 4]
+      iex>
+      iex> values(ipt, 48)
+      []
+      iex>
+      iex> values(ipt, [32, 48, 128])
+      [1, 2, 3, 4]
+
+  """
+  @spec values(t, integer | list(integer)) :: list(any)
+  def values(%Iptrie{} = trie, type) when is_integer(type) do
+    tree = Map.get(trie, type) || Radix.new()
+    Radix.values(tree)
+  end
+
+  def values(%Iptrie{} = trie, types) when is_list(types) do
+    Enum.map(types, fn type -> values(trie, type) end)
+    |> List.flatten()
+  end
+
+  @doc ~S"""
+  Return all the values stored in all radix trees in `trie`.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> values(ipt)
+      [1, 2, 3, 4]
+
+  """
+  @spec values(t) :: list(any)
+  def values(%Iptrie{} = trie) do
+    types =
+      Map.keys(trie)
+      |> Enum.filter(fn x -> is_integer(x) end)
+
+    values(trie, types)
   end
 
   @doc """
@@ -402,10 +462,11 @@ defmodule Iptrie do
   end
 
   @doc """
-  Lookup `prefix` and update its value, only if found.
+  Lookup `prefix` and update the matched entry, only if found.
 
-  If found, `fun` is called on its value.  If `prefix` is not found,
-  the `trie` is returned unchanged.
+  Uses longest prefix match, so search `prefix` is usually matched by some less
+  specific prefix.  If matched, `fun` is called on its value.  If
+  `prefix` had no longest prefix match, the `trie` is returned unchanged.
 
   ## Example
 
@@ -438,8 +499,10 @@ defmodule Iptrie do
   @doc """
   Lookup `prefix` and, if found,  update its value or insert the default.
 
-  If `prefix` is found, `fun` is called on its value.  If `prefix` is not
-  in the tree, the default is inserted and `fun` is not called.
+  Uses longest prefix match, so search `prefix` is usually matched by some less
+  specific prefix.  If matched, `fun` is called on the entry's value.  If
+  `prefix` had no longest prefix match, the default is inserted and `fun` is
+  not called.
 
   ## Example
 
