@@ -201,7 +201,7 @@ defmodule Iptrie do
   end
 
   @doc ~S"""
-  Return the prefixes from the radix tree(s) in `trie` for given `type`.
+  Return the  prefixes stored in the radix tree(s) in `trie` for given `type`.
 
   Where `type` is a single maxlen or a list thereof.
 
@@ -252,7 +252,7 @@ defmodule Iptrie do
   end
 
   @doc ~S"""
-  Return all the prefixes for all available radix trees in `trie`.
+  Return all prefixes stored in all available radix trees in `trie`.
 
   ## Example
 
@@ -523,5 +523,77 @@ defmodule Iptrie do
     rescue
       ArgumentError -> trie
     end
+  end
+
+  @doc """
+  Returns all prefix,values-pairs from a radix tree in `trie` for given `type`
+
+  If the radix tree for `type` does not exist, an empty list is returned.
+  If `type` is a list of types, a flat list of all prefix,value-pairs of all
+  radix trees of given types is returned.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> to_list(ipt, 32)
+      [
+        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
+        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2}
+      ]
+      iex> to_list(ipt, [32, 48, 128])
+      [
+        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
+        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2},
+        {%Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128}, 3},
+        {%Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}, 4}
+      ]
+
+  """
+  @spec to_list(t, integer) :: list({prefix, any})
+  def to_list(%Iptrie{} = trie, type) when is_integer(type) do
+    tree = Map.get(trie, type) || Radix.new()
+
+    Radix.to_list(tree)
+    |> Enum.map(fn {bits, value} -> {Pfx.new(bits, type), value} end)
+  end
+
+  def to_list(%Iptrie{} = trie, types) when is_list(types) do
+    types
+    |> Enum.map(fn type -> to_list(trie, type) end)
+    |> List.flatten()
+  end
+
+  @doc """
+  Return all prefix,value-pairs from all available radix trees in `trie`.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> to_list(ipt)
+      [
+        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
+        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2},
+        {%Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128}, 3},
+        {%Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}, 4}
+      ]
+
+  """
+  @spec to_list(t) :: list({prefix, any})
+  def to_list(%Iptrie{} = trie) do
+    types =
+      Map.keys(trie)
+      |> Enum.filter(fn x -> is_integer(x) end)
+
+    to_list(trie, types)
   end
 end
