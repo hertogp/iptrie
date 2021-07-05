@@ -6,7 +6,7 @@
 
 <!-- @MODULEDOC -->
 
-A longest prefix match IP lookup for IPv4, IPv6 prefixes (and others).
+IP lookup, with longest prefix match, for IPv4, IPv6 prefixes (and others).
 
 Iptrie manages multiple `t:Radix.tree/0` trees, one for each type of
 `t:Pfx.t/0` prefix used as determined by their `maxlen` property.  That way,

@@ -293,4 +293,65 @@ defmodule Iptrie do
       ArgumentError -> []
     end
   end
+
+  @doc """
+  Lookup `prefix` and update its value only if found.
+
+  If found, `fun` is called on its value.  If `prefix` is not found,
+  the `trie` is returned unchanged.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 0)
+      ...> |> update("1.1.1.0", fn x -> x + 1 end)
+      ...> |> update("1.1.1.1", fn x -> x + 1 end)
+      ...> |> update("2.2.2.2", fn x -> x + 1 end)
+      iex> get(ipt, "1.1.1.0/24")
+      {"1.1.1.0/24", 2}
+      iex> lookup(ipt, "2.2.2.2")
+      nil
+
+  """
+  @spec update(t, prefix, (any -> any)) :: t
+  def update(%__MODULE__{} = trie, prefix, fun) when is_function(fun, 1) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = Map.get(trie, pfx.maxlen) || Radix.new()
+
+      case Radix.lookup(tree, pfx.bits) do
+        nil -> trie
+        {bits, value} -> Map.put(trie, pfx.maxlen, Radix.put(tree, bits, fun.(value)))
+      end
+    rescue
+      ArgumentError -> trie
+    end
+  end
+
+  @doc """
+  Lookup `prefix` and update its value or insert the default.
+
+  If `prefix` is found, `fun` is called on its value.  If `prefix` is not
+  in the tree, the default is inserted in which case `fun` is not called.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> update("1.1.1.0/24", 0, fn x -> x + 1 end)
+      ...> |> update("1.1.1.0", 0, fn x -> x + 1 end)
+      ...> |> update("1.1.1.1", 0, fn x -> x + 1 end)
+      iex> lookup(ipt, "1.1.1.2")
+      {"1.1.1.0/24", 2}
+
+  """
+  @spec update(t, prefix, any, (any -> any)) :: t
+  def update(%__MODULE__{} = trie, prefix, default, fun) when is_function(fun, 1) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = Map.get(trie, pfx.maxlen) || Radix.new()
+      Map.put(trie, pfx.maxlen, Radix.update(tree, pfx.bits, default, fun))
+    rescue
+      ArgumentError -> trie
+    end
+  end
 end

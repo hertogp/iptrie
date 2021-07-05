@@ -19,7 +19,7 @@ defmodule Iptrie.MixProject do
       version: @version,
       elixir: "~> 1.11",
       name: "Iptrie",
-      description: "A longest prefix match IP lookup for IPv4, IPv6 prefixes (and others)",
+      description: "IP lookup, with longest prefix match, for IPv4, IPv6 prefixes (and others).",
       deps: deps(),
       docs: docs(),
       package: package()
