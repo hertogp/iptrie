@@ -554,7 +554,7 @@ defmodule Iptrie do
       ]
 
   """
-  @spec to_list(t, integer) :: list({prefix, any})
+  @spec to_list(t, non_neg_integer | list(non_neg_integer)) :: list({prefix, any})
   def to_list(%Iptrie{} = trie, type) when is_integer(type) do
     tree = Map.get(trie, type) || Radix.new()
 
