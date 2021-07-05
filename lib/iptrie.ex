@@ -78,7 +78,7 @@ defmodule Iptrie do
 
 
   """
-  @spec get(t, prefix() | list(prefix())) :: {prefix(), any} | nil | list({prefix(), any} | nil)
+  @spec get(t, prefix() | list(prefix())) :: {prefix(), any} | nil | list({prefix(), any})
   def get(%__MODULE__{} = trie, prefixes) when is_list(prefixes) do
     Enum.map(prefixes, fn prefix -> get(trie, prefix) end)
   end
@@ -227,15 +227,15 @@ defmodule Iptrie do
       ]
 
   """
-  @spec more(t(), prefix()) :: {prefix(), any} | nil
+  @spec more(t(), prefix()) :: list({prefix(), any})
   def more(%__MODULE__{} = trie, prefix) do
     try do
       pfx = Pfx.new(prefix)
       tree = Map.get(trie, pfx.maxlen) || Radix.new()
 
       case Radix.more(tree, pfx.bits) do
-        nil ->
-          nil
+        [] ->
+          []
 
         list ->
           Enum.map(list, fn {bits, value} ->
@@ -243,7 +243,7 @@ defmodule Iptrie do
           end)
       end
     rescue
-      ArgumentError -> nil
+      ArgumentError -> []
     end
   end
 
@@ -274,15 +274,15 @@ defmodule Iptrie do
       []
 
   """
-  @spec less(t(), prefix()) :: {prefix(), any} | nil
+  @spec less(t(), prefix()) :: list({prefix(), any})
   def less(%__MODULE__{} = trie, prefix) do
     try do
       pfx = Pfx.new(prefix)
       tree = Map.get(trie, pfx.maxlen) || Radix.new()
 
       case Radix.less(tree, pfx.bits) do
-        nil ->
-          nil
+        [] ->
+          []
 
         list ->
           Enum.map(list, fn {bits, value} ->
@@ -290,7 +290,7 @@ defmodule Iptrie do
           end)
       end
     rescue
-      ArgumentError -> nil
+      ArgumentError -> []
     end
   end
 end
