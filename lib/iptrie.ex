@@ -37,13 +37,10 @@ defmodule Iptrie do
 
   # Helpers
 
-  defp get_types(%Iptrie{} = trie),
+  defp trie_types(%Iptrie{} = trie),
     do: Map.keys(trie) |> Enum.filter(fn x -> is_integer(x) end)
 
-  defp get_radix(trie, maxlen),
-    do: Map.get(trie, maxlen) || @empty_rdx
-
-  # defp get_radixes(%Iptrie{} = trie),
+  # defp radixes(%Iptrie{} = trie),
   #   do: Map.values(trie) |> Enum.filter(fn x -> is_tuple(x) end)
 
   # API
@@ -94,14 +91,13 @@ defmodule Iptrie do
 
   """
   @spec get(t, prefix() | list(prefix())) :: {prefix(), any} | nil | list({prefix(), any})
-  def get(%__MODULE__{} = trie, prefixes) when is_list(prefixes) do
-    Enum.map(prefixes, fn prefix -> get(trie, prefix) end)
-  end
+  def get(%__MODULE__{} = trie, prefixes) when is_list(prefixes),
+    do: Enum.map(prefixes, fn prefix -> get(trie, prefix) end)
 
   def get(%__MODULE__{} = trie, prefix) do
     try do
       pfx = Pfx.new(prefix)
-      tree = get_radix(trie, pfx.maxlen)
+      tree = radix(trie, pfx.maxlen)
 
       case Radix.get(tree, pfx.bits) do
         nil -> nil
@@ -127,9 +123,8 @@ defmodule Iptrie do
 
   """
   @spec put(t, list({prefix(), any})) :: t
-  def put(%__MODULE__{} = trie, elements) when is_list(elements) do
-    Enum.reduce(elements, trie, fn {k, v}, t -> put(t, k, v) end)
-  end
+  def put(%__MODULE__{} = trie, elements) when is_list(elements),
+    do: Enum.reduce(elements, trie, fn {k, v}, t -> put(t, k, v) end)
 
   @doc """
   Puts `value` under `prefix` in the `trie`.
@@ -152,7 +147,7 @@ defmodule Iptrie do
   def put(%__MODULE__{} = trie, prefix, value) do
     try do
       pfx = Pfx.new(prefix)
-      tree = get_radix(trie, pfx.maxlen)
+      tree = radix(trie, pfx.maxlen)
       Map.put(trie, pfx.maxlen, Radix.put(tree, pfx.bits, value))
     rescue
       ArgumentError -> trie
@@ -160,9 +155,9 @@ defmodule Iptrie do
   end
 
   @doc """
-  Delete one or more prefix, value-pair(s) from the `trie` using an exact match.
+  Delete one or more prefix, value-pairs from the `trie` using an exact match.
 
-  The list of prefixes to delete may contains all __types__, so all sorts of
+  The list of prefixes to delete may contain all _types_, so all sorts of
   prefixes can be deleted from multiple radix trees in one go.
 
   ## Example
@@ -200,14 +195,14 @@ defmodule Iptrie do
       [<<0xacdc::16, 0x1975::16>>]
 
   """
-  @spec delete(t, prefix) :: t
+  @spec delete(t, prefix | list(prefix)) :: t
   def delete(%__MODULE__{} = trie, prefixes) when is_list(prefixes),
     do: Enum.reduce(prefixes, trie, fn pfx, trie -> delete(trie, pfx) end)
 
   def delete(%__MODULE__{} = trie, prefix) do
     try do
       pfx = Pfx.new(prefix)
-      tree = get_radix(trie, pfx.maxlen)
+      tree = radix(trie, pfx.maxlen)
       Map.put(trie, pfx.maxlen, Radix.delete(tree, pfx.bits))
     rescue
       ArgumentError -> trie
@@ -253,7 +248,7 @@ defmodule Iptrie do
   """
   @spec keys(t, integer | list(integer)) :: list(prefix)
   def keys(%Iptrie{} = trie, type) when is_integer(type) do
-    get_radix(trie, type)
+    radix(trie, type)
     |> Radix.keys()
     |> Enum.map(fn bits -> Pfx.new(bits, type) end)
   end
@@ -286,7 +281,7 @@ defmodule Iptrie do
   """
   @spec keys(t) :: list(prefix)
   def keys(%Iptrie{} = trie) do
-    types = get_types(trie)
+    types = trie_types(trie)
     keys(trie, types)
   end
 
@@ -318,7 +313,7 @@ defmodule Iptrie do
   """
   @spec values(t, integer | list(integer)) :: list(any)
   def values(%Iptrie{} = trie, type) when is_integer(type),
-    do: get_radix(trie, type) |> Radix.values()
+    do: radix(trie, type) |> Radix.values()
 
   def values(%Iptrie{} = trie, types) when is_list(types) do
     Enum.map(types, fn type -> values(trie, type) end)
@@ -342,7 +337,7 @@ defmodule Iptrie do
   """
   @spec values(t) :: list(any)
   def values(%Iptrie{} = trie) do
-    types = get_types(trie)
+    types = trie_types(trie)
     values(trie, types)
   end
 
@@ -359,7 +354,7 @@ defmodule Iptrie do
   def lookup(%__MODULE__{} = trie, prefix) do
     try do
       pfx = Pfx.new(prefix)
-      tree = get_radix(trie, pfx.maxlen)
+      tree = radix(trie, pfx.maxlen)
 
       case Radix.lookup(tree, pfx.bits) do
         nil -> nil
@@ -401,7 +396,7 @@ defmodule Iptrie do
   def more(%__MODULE__{} = trie, prefix) do
     try do
       pfx = Pfx.new(prefix)
-      tree = get_radix(trie, pfx.maxlen)
+      tree = radix(trie, pfx.maxlen)
 
       case Radix.more(tree, pfx.bits) do
         [] ->
@@ -449,7 +444,7 @@ defmodule Iptrie do
   def less(%__MODULE__{} = trie, prefix) do
     try do
       pfx = Pfx.new(prefix)
-      tree = get_radix(trie, pfx.maxlen)
+      tree = radix(trie, pfx.maxlen)
 
       case Radix.less(tree, pfx.bits) do
         [] ->
@@ -489,7 +484,7 @@ defmodule Iptrie do
   def update(%__MODULE__{} = trie, prefix, fun) when is_function(fun, 1) do
     try do
       pfx = Pfx.new(prefix)
-      tree = get_radix(trie, pfx.maxlen)
+      tree = radix(trie, pfx.maxlen)
 
       case Radix.lookup(tree, pfx.bits) do
         nil -> trie
@@ -514,15 +509,21 @@ defmodule Iptrie do
       ...> |> update("1.1.1.0/24", 0, fn x -> x + 1 end)
       ...> |> update("1.1.1.0", 0, fn x -> x + 1 end)
       ...> |> update("1.1.1.1", 0, fn x -> x + 1 end)
+      ...> |> update("2.2.2.2", 0, fn x -> x + 1 end)
       iex> lookup(ipt, "1.1.1.2")
       {"1.1.1.0/24", 2}
+      iex>
+      iex> # probably not what you wanted:
+      iex>
+      iex> lookup(ipt, "2.2.2.2")
+      {"2.2.2.2", 0}
 
   """
   @spec update(t, prefix, any, (any -> any)) :: t
   def update(%__MODULE__{} = trie, prefix, default, fun) when is_function(fun, 1) do
     try do
       pfx = Pfx.new(prefix)
-      tree = get_radix(trie, pfx.maxlen)
+      tree = radix(trie, pfx.maxlen)
       Map.put(trie, pfx.maxlen, Radix.update(tree, pfx.bits, default, fun))
     rescue
       ArgumentError -> trie
@@ -530,7 +531,8 @@ defmodule Iptrie do
   end
 
   @doc """
-  Returns all prefix,value-pairs from a radix tree in `trie` for given `type`(s).
+  Returns the prefix,value-pairs from the radix trees in `trie` for given
+  `type`(s).
 
   If the radix tree for `type` does not exist, an empty list is returned.
   If `type` is a list of types, a flat list of all prefix,value-pairs of all
@@ -560,7 +562,7 @@ defmodule Iptrie do
   """
   @spec to_list(t, non_neg_integer | list(non_neg_integer)) :: list({prefix, any})
   def to_list(%Iptrie{} = trie, type) when is_integer(type) do
-    tree = get_radix(trie, type)
+    tree = radix(trie, type)
 
     Radix.to_list(tree)
     |> Enum.map(fn {bits, value} -> {Pfx.new(bits, type), value} end)
@@ -594,12 +596,20 @@ defmodule Iptrie do
   """
   @spec to_list(t) :: list({prefix, any})
   def to_list(%Iptrie{} = trie) do
-    types = get_types(trie)
+    types = trie_types(trie)
     to_list(trie, types)
   end
 
   @doc """
   Invoke `fun` on each prefix,value-pair in the radix tree for given `type`
+
+  This simply wraps `Radix.reduce/3` for the radix tree in `trie` at given
+  `type`.  The function `fun` is called with the radix key, value and `acc`
+  accumulator and should return an updated accumulator.  The result is the last
+  `acc` accumulator returned.
+
+  If `type` is a list of `type`'s, the `acc` accumulator is updated across all
+  radix trees of `type`'s.  Probably not entirely usefull, but there you go.
 
   ## Example
 
@@ -622,14 +632,12 @@ defmodule Iptrie do
   """
   @spec reduce(t, non_neg_integer | list(non_neg_integer), any, (bitstring, any, any -> any)) ::
           any
-  def reduce(%Iptrie{} = trie, type, acc, fun) when is_integer(type) and is_function(fun, 3) do
-    tree = get_radix(trie, type)
-    Radix.reduce(tree, acc, fun)
-  end
+  def reduce(%Iptrie{} = trie, type, acc, fun) when is_integer(type) and is_function(fun, 3),
+    do: radix(trie, type) |> Radix.reduce(acc, fun)
 
   def reduce(%Iptrie{} = trie, types, acc, fun) when is_list(types) and is_function(fun, 3) do
     types
-    |> Enum.map(fn type -> get_radix(trie, type) end)
+    |> Enum.map(fn type -> radix(trie, type) end)
     |> Enum.reduce(acc, fn tree, acc -> Radix.reduce(tree, acc, fun) end)
   end
 
@@ -646,11 +654,40 @@ defmodule Iptrie do
       iex>
       iex> reduce(ipt, 0, fn _key, value, acc -> acc + value end)
       10
+      iex>
+      iex> reduce(ipt, %{}, fn key, value, acc -> Map.put(acc, key, value) end)
+      %{<<1, 1, 1>> => 1, <<2, 2, 2>> => 2, <<172, 220, 25, 117>> => 3, <<172, 220, 32, 33>> => 4}
 
   """
   @spec reduce(t, any, (bitstring, any, any -> any)) :: any
   def reduce(%Iptrie{} = trie, acc, fun) do
-    types = get_types(trie)
+    types = trie_types(trie)
     reduce(trie, types, acc, fun)
   end
+
+  @doc """
+  Return the radix tree for given `type`.
+
+  If `trie` has no `Radix` tree for given `type`, an empty radix will be returned.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> radix(ipt, 32)
+      {0, {6, [{<<1, 1, 1>>, 1}], [{<<2, 2, 2>>, 2}]}, nil}
+      iex>
+      iex> radix(ipt, 128)
+      {0, nil, {18, [{<<172, 220, 25, 117>>, 3}], [{<<172, 220, 32, 33>>, 4}]}}
+      iex> radix(ipt, 48)
+      {0, nil, nil}
+
+  """
+  @spec radix(t, integer) :: Radix.tree()
+  def radix(%Iptrie{} = trie, type) when is_integer(type),
+    do: Map.get(trie, type) || @empty_rdx
 end

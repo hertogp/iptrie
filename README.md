@@ -19,7 +19,7 @@ require the actual `t:Pfx.t/0` structs as arguments for the various Iptrie
 functions.
 
 Like `Pfx`, Iptrie tries to mirror the representation of results to the
-argument(s) given.
+argument(s) given, if possible.
 
 ## Example
 
@@ -62,6 +62,8 @@ argument(s) given.
     iex>
     iex> Map.get(ipt, 48)
     {0, nil, [{<<170, 187, 204, 221>>, "some OUI"}]}
+    iex>
+
 
 <!-- @MODULEDOC -->
 
@@ -73,7 +75,7 @@ list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:iptrie, "~> 0.1.0"}
+    {:iptrie, "~> 0.2.0"}
   ]
 end
 ```
