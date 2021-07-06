@@ -2,7 +2,8 @@ defmodule Iptrie.MixProject do
   use Mix.Project
 
   # Before publishing to Hex:
-  # - set version tag in mix.exs, README.md
+  # - update CHANGELOG.md for changes in new version
+  # - set new version tag in mix.exs, README.md
   # - mix test
   # - mix docz
   # - mix dialyzer
@@ -10,7 +11,7 @@ defmodule Iptrie.MixProject do
   # - git push --tags
   # mix hex.publish
 
-  @version "0.2.0"
+  @version "0.3.0"
   @url "https://github.com/hertogp/iptrie"
 
   def project do
