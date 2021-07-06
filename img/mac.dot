@@ -1,0 +1,47 @@
+digraph Radix {
+  labelloc="t";
+  label="MAC OUI";
+  rankdir="TB";
+  ranksep="0.5 equally";
+N4 [label=<
+  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N4" BGCOLOR="green">leaf</TD></TR>
+    <TR><TD>Rockwell Automation</TD></TR>
+  </TABLE>
+  >, shape="plaintext"];
+N2 [label=<
+  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N2" BGCOLOR="green">leaf</TD></TR>
+    <TR><TD>IGT</TD></TR>
+  </TABLE>
+  >, shape="plaintext"];
+N1 [label=<
+  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N1" BGCOLOR="green">leaf</TD></TR>
+    <TR><TD>American Micro-Fuel Device</TD></TR>
+  </TABLE>
+  >, shape="plaintext"];
+N3:R -> N2;
+N3:L -> N1;
+N3 [label=<
+  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N3" COLSPAN="2" BGCOLOR="yellow">bit 8</TD></TR>
+    <TR><TD PORT="L">0</TD><TD PORT="R">1</TD></TR>
+  </TABLE>
+>, shape="plaintext"];
+N5:R -> N4;
+N5:L -> N3;
+N5 [label=<
+  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N5" COLSPAN="2" BGCOLOR="yellow">bit 4</TD></TR>
+    <TR><TD PORT="L">0</TD><TD PORT="R">1</TD></TR>
+  </TABLE>
+>, shape="plaintext"];
+N7:L -> N5;
+N7 [label=<
+  <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+    <TR><TD PORT="N7" COLSPAN="2" BGCOLOR="orange">bit 0</TD></TR>
+    <TR><TD PORT="L">0</TD><TD PORT="R">1</TD></TR>
+  </TABLE>
+>, shape="plaintext"];
+}

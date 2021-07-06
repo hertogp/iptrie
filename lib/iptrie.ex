@@ -37,7 +37,7 @@ defmodule Iptrie do
 
   # Helpers
 
-  defp trie_types(%Iptrie{} = trie),
+  defp types(%Iptrie{} = trie),
     do: Map.keys(trie) |> Enum.filter(fn x -> is_integer(x) end)
 
   # defp radixes(%Iptrie{} = trie),
@@ -209,6 +209,211 @@ defmodule Iptrie do
     end
   end
 
+  @doc """
+  Fetches the prefix,value-pair for given `prefix` from `trie` (exact match).
+
+  In case of success, returns {:ok, {prefix, value}}.  
+  If `prefix` is not present, returns `{:error, :notfound}`.  
+  In case of encoding errors for `prefix`, returns `{:error, :notprefix}`
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", "one")
+      ...> |> put("2.2.2.0/24", "two")
+      iex>
+      iex> fetch(ipt, "1.1.1.0/24")
+      {:ok, {"1.1.1.0/24", "one"}}
+      iex>
+      iex> fetch(ipt, "12.12.12.12")
+      {:error, :notfound}
+      iex>
+      iex> fetch(ipt, "13.13.13.333")
+      {:error, :notprefix}
+
+  """
+  @spec fetch(t, prefix) :: {:ok, {prefix, any}} | {:error, atom}
+  def fetch(%Iptrie{} = trie, prefix) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = radix(trie, pfx.maxlen)
+
+      case Radix.get(tree, pfx.bits) do
+        nil -> {:error, :notfound}
+        {bits, value} -> {:ok, {Pfx.marshall(%{pfx | bits: bits}, prefix), value}}
+      end
+    rescue
+      ArgumentError -> {:error, :notprefix}
+    end
+  end
+
+  @doc """
+  Fetches the prefix,value-pair for given `prefix` from `trie` (exact match).
+
+  In case of success, returns {prefix, value}.  
+  If `prefix` is not present, raises a `KeyError`.  
+  If `prefix` could not be encoded, raises an `ArgumentError`.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("10.10.10.0/24", "ten")
+      ...> |> put("11.11.11.0/24", "eleven")
+      iex>
+      iex> fetch!(ipt, "10.10.10.0/24")
+      {"10.10.10.0/24", "ten"}
+      iex>
+      iex> fetch!(ipt, "12.12.12.12")
+      ** (KeyError) prefix "12.12.12.12" not found
+
+      iex> ipt = new()
+      iex> fetch!(ipt, "13.13.13.333")
+      ** (ArgumentError) invalid prefix "13.13.13.333"
+
+  """
+  @spec fetch!(t, prefix) :: {prefix, any} | KeyError | ArgumentError
+  def fetch!(%Iptrie{} = trie, prefix) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = radix(trie, pfx.maxlen)
+
+      case Radix.get(tree, pfx.bits) do
+        nil -> raise KeyError, "prefix #{inspect(prefix)} not found"
+        {bits, value} -> {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
+      end
+    rescue
+      ArgumentError -> raise ArgumentError, "invalid prefix #{inspect(prefix)}"
+    end
+  end
+
+  @doc """
+  Finds a prefix,value-pair for given `prefix` from `trie` (longest match).
+
+  In case of success, returns {:ok, {prefix, value}}.  
+  If `prefix` had no match, returns `{:error, :notfound}`.  
+  In case of encoding errors for `prefix`, returns `{:error, :notprefix}`
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", "one")
+      ...> |> put("2.2.2.0/24", "two")
+      iex>
+      iex> find(ipt, "1.1.1.0/24")
+      {:ok, {"1.1.1.0/24", "one"}}
+      iex>
+      iex> find(ipt, "12.12.12.12")
+      {:error, :notfound}
+      iex>
+      iex> find(ipt, "13.13.13.333")
+      {:error, :notprefix}
+
+  """
+  @spec find(t, prefix) :: {:ok, {prefix, any}} | {:error, atom}
+  def find(%Iptrie{} = trie, prefix) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = radix(trie, pfx.maxlen)
+
+      case Radix.lookup(tree, pfx.bits) do
+        nil -> {:error, :notfound}
+        {bits, value} -> {:ok, {Pfx.marshall(%{pfx | bits: bits}, prefix), value}}
+      end
+    rescue
+      ArgumentError -> {:error, :notprefix}
+    end
+  end
+
+  @doc """
+  Finds a prefix,value-pair for given `prefix` from `trie` (longest match).
+
+  In case of success, returns {prefix, value}.  
+  If `prefix` had no match, raises a `KeyError`.  
+  If `prefix` could not be encoded, raises an `ArgumentError`.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("10.10.10.0/24", "ten")
+      ...> |> put("11.11.11.0/24", "eleven")
+      iex>
+      iex> find!(ipt, "10.10.10.0/24")
+      {"10.10.10.0/24", "ten"}
+      iex>
+      iex> find!(ipt, "12.12.12.12")
+      ** (KeyError) prefix "12.12.12.12" not found
+
+      iex> ipt = new()
+      iex> find!(ipt, "13.13.13.333")
+      ** (ArgumentError) invalid prefix "13.13.13.333"
+
+  """
+  @spec find!(t, prefix) :: {prefix, any} | KeyError | ArgumentError
+  def find!(%Iptrie{} = trie, prefix) do
+    try do
+      pfx = Pfx.new(prefix)
+      tree = radix(trie, pfx.maxlen)
+
+      case Radix.lookup(tree, pfx.bits) do
+        nil -> raise KeyError, "prefix #{inspect(prefix)} not found"
+        {bits, value} -> {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
+      end
+    rescue
+      ArgumentError -> raise ArgumentError, "invalid prefix #{inspect(prefix)}"
+    end
+  end
+
+  @doc ~S"""
+  Returns a new Iptrie, keeping only the entries for which `fun` returns _truthy_.
+
+  The signature for `fun` is (key, maxlen, value -> boolean), where the (radix)
+  key is the original bitstring of the prefix of type maxlen, used to store some
+  value in that particular radix tree in given `trie`.
+
+  Radix trees that are empty, are removed from the new Iptrie.
+
+  Note that, if need be, `Pfx.new(key, maxlen)` reconstructs the original
+  prefix used to store the value in the `trie`.
+
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("acdc:1975::/32", "rock")
+      ...> |> put("acdc:1976::/32", "rock")
+      ...> |> put("abba:1975::/32", "pop")
+      ...> |> put("abba:1976::/32", "pop")
+      ...> |> put("1.1.1.0/24", "v4")
+      iex>
+      iex> filter(ipt, fn _bits, maxlen, _value -> maxlen == 32 end)
+      ...> |> to_list()
+      [{%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, "v4"}]
+      iex>
+      iex> filter(ipt, fn _bits, _max, value -> value == "rock" end)
+      ...> |> to_list()
+      ...> |> Enum.map(fn {pfx, value} -> {"#{pfx}", value} end)
+      [
+        {"acdc:1975:0:0:0:0:0:0/32", "rock"},
+        {"acdc:1976:0:0:0:0:0:0/32", "rock"}
+      ]
+
+  """
+  @spec filter(t, (bitstring, non_neg_integer, any -> boolean)) :: t
+  def filter(%Iptrie{} = trie, fun) when is_function(fun, 3) do
+    types(trie)
+    |> Enum.map(fn type -> {type, filterp(radix(trie, type), type, fun)} end)
+    |> Enum.filter(fn {_t, rdx} -> rdx != @empty_rdx end)
+    |> Enum.reduce(Iptrie.new(), fn {type, rdx}, ipt -> Map.put(ipt, type, rdx) end)
+  end
+
+  defp filterp(rdx, type, fun) do
+    keep = fn key, val, acc ->
+      if fun.(key, type, val), do: Radix.put(acc, key, val), else: acc
+    end
+
+    Radix.reduce(rdx, Radix.new(), keep)
+  end
+
   @doc ~S"""
   Return the  prefixes stored in the radix tree(s) in `trie` for given `type`.
 
@@ -261,6 +466,9 @@ defmodule Iptrie do
   @doc ~S"""
   Return all prefixes stored in all available radix trees in `trie`.
 
+  The prefixes are reconstructed as `t:Pfx.t/0` by combining the stored bitstrings
+  with the `Radix`-tree's type.e. maxlen property).
+
   ## Example
 
       iex> ipt = new()
@@ -270,19 +478,23 @@ defmodule Iptrie do
       ...> |> put("acdc:2021::/32", 4)
       iex>
       iex> keys(ipt)
-      ...> |> Enum.map(fn x -> "#{x}" end)
       [
-        "1.1.1.0/24",
-        "2.2.2.0/24",
-        "acdc:1975:0:0:0:0:0:0/32",
-        "acdc:2021:0:0:0:0:0:0/32"
+        %Pfx{bits: <<1, 1, 1>>, maxlen: 32},
+        %Pfx{bits: <<2, 2, 2>>, maxlen: 32},
+        %Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128},
+        %Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}
+      ]
+      iex>
+      iex> radix(ipt, 32) |> Radix.keys()
+      [
+        <<1, 1, 1>>,
+        <<2, 2, 2>>
       ]
 
   """
   @spec keys(t) :: list(prefix)
   def keys(%Iptrie{} = trie) do
-    types = trie_types(trie)
-    keys(trie, types)
+    keys(trie, types(trie))
   end
 
   @doc ~S"""
@@ -337,8 +549,7 @@ defmodule Iptrie do
   """
   @spec values(t) :: list(any)
   def values(%Iptrie{} = trie) do
-    types = trie_types(trie)
-    values(trie, types)
+    values(trie, types(trie))
   end
 
   @doc """
@@ -596,8 +807,7 @@ defmodule Iptrie do
   """
   @spec to_list(t) :: list({prefix, any})
   def to_list(%Iptrie{} = trie) do
-    types = trie_types(trie)
-    to_list(trie, types)
+    to_list(trie, types(trie))
   end
 
   @doc """
@@ -661,14 +871,14 @@ defmodule Iptrie do
   """
   @spec reduce(t, any, (bitstring, any, any -> any)) :: any
   def reduce(%Iptrie{} = trie, acc, fun) do
-    types = trie_types(trie)
-    reduce(trie, types, acc, fun)
+    reduce(trie, types(trie), acc, fun)
   end
 
   @doc """
-  Return the radix tree for given `type`.
+  Return the radix tree for given `type` or a new empty tree.
 
-  If `trie` has no `Radix` tree for given `type`, an empty radix will be returned.
+  If there is no `Radix` tree for given `type`, an empty radix will be returned
+  without storing it in the `trie`.
 
   ## Example
 

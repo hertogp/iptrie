@@ -22,8 +22,8 @@ defmodule Iptrie.MixProject do
       description: "IP lookup, with longest prefix match, for IPv4, IPv6 prefixes (and others).",
       deps: deps(),
       docs: docs(),
-      package: package()
-      # aliases: aliases()
+      package: package(),
+      aliases: aliases()
     ]
   end
 
@@ -58,7 +58,34 @@ defmodule Iptrie.MixProject do
     ]
   end
 
-  # defp aliases do
-  #   [docz: ["docs"]]
-  # end
+  defp aliases() do
+    [docz: ["docs", &cp_images/1]]
+  end
+
+  defp cp_images(_) do
+    # the repo doesn't track `/doc/` or any of its subdirectories.  Github
+    # links work if documentation links to images like `![xx](img/a.png)`
+    #
+    # While on hex.pm, image links are taken to be relative to the repo's
+    # root/doc directory.  Hence, the img/*.dot files are processed into
+    # img/*.png files, after which the img/*.png files are copied to
+    # doc/img/*.png so everybody is happy.
+    #
+    # Also note, that doing it this way (img/*.png -> doc/img/*.png) keeps
+    # the CI from failing, since the doc/img dir does not exist so doctests
+    # that simply try to write to e.g. doc/img/a.png will fail.
+
+    # ensure the (untracked) doc/img directory for hex.pm
+    Path.join("doc", "img")
+    |> File.mkdir_p!()
+
+    # process all img/*.dot files into img/*.dot.png image files
+    Path.wildcard("img/*.dot")
+    |> Enum.map(fn file -> System.cmd("dot", ["-O", "-Tpng", file]) end)
+
+    # copy img/*.png to doc/img/*.png
+    Path.wildcard("img/*.png")
+    |> Enum.map(fn src -> {src, Path.join("doc", src)} end)
+    |> Enum.map(fn {src, dst} -> File.cp!(src, dst) end)
+  end
 end
