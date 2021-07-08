@@ -18,7 +18,7 @@ defmodule Iptrie do
 
   Although Iptrie facilitates lpm lookups of any type of prefix, it has a bias
   towards IP prefixes. So, any binaries (strings) are interpreted as
-  CIDR-strings and tuples of address digits and/or {address-digits, length) are
+  CIDR-strings and tuples of address digits and/or {address-digits, length} are
   interpreted as IPv4 or IPv6 representations.
 
   """

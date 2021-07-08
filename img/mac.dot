@@ -6,19 +6,19 @@ digraph Radix {
 N4 [label=<
   <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
     <TR><TD PORT="N4" BGCOLOR="green">leaf</TD></TR>
-    <TR><TD>Rockwell Automation</TD></TR>
+    <TR><TD>08-61-95-00-00-00/24<br/>Rockwell Automation</TD></TR>
   </TABLE>
   >, shape="plaintext"];
 N2 [label=<
   <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
     <TR><TD PORT="N2" BGCOLOR="green">leaf</TD></TR>
-    <TR><TD>IGT</TD></TR>
+    <TR><TD>00-D0-EF-00-00-00/24<br/>IGT</TD></TR>
   </TABLE>
   >, shape="plaintext"];
 N1 [label=<
   <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
     <TR><TD PORT="N1" BGCOLOR="green">leaf</TD></TR>
-    <TR><TD>American Micro-Fuel Device</TD></TR>
+    <TR><TD>00-22-72-00-00-00/24<br/>American Micro-Fuel Device</TD></TR>
   </TABLE>
   >, shape="plaintext"];
 N3:R -> N2;
