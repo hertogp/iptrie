@@ -26,7 +26,7 @@ defmodule Iptrie do
 
   @typedoc """
   A prefix represented as an opague `t:Pfx.t/0` struct, an
-  `t:Pfx.ip_address/0`, `t:Pfx.ip_prefix/0` or CIDR string.
+  `t:Pfx.ip_address/0`, `t:Pfx.ip_prefix/0`, IP CIDR string or EUI-48/64 string.
 
   See: `Pfx`.
 
@@ -214,7 +214,7 @@ defmodule Iptrie do
 
   In case of success, returns {:ok, {prefix, value}}.  
   If `prefix` is not present, returns `{:error, :notfound}`.  
-  In case of encoding errors for `prefix`, returns `{:error, :notprefix}`
+  In case of encoding errors for `prefix`, returns `{:error, :einval}`
 
   ## Example
 
@@ -229,7 +229,7 @@ defmodule Iptrie do
       {:error, :notfound}
       iex>
       iex> fetch(ipt, "13.13.13.333")
-      {:error, :notprefix}
+      {:error, :einval}
 
   """
   @spec fetch(t, prefix) :: {:ok, {prefix, any}} | {:error, atom}
@@ -243,7 +243,7 @@ defmodule Iptrie do
         {bits, value} -> {:ok, {Pfx.marshall(%{pfx | bits: bits}, prefix), value}}
       end
     rescue
-      ArgumentError -> {:error, :notprefix}
+      ArgumentError -> {:error, :einval}
     end
   end
 
@@ -291,7 +291,7 @@ defmodule Iptrie do
 
   In case of success, returns {:ok, {prefix, value}}.  
   If `prefix` had no match, returns `{:error, :notfound}`.  
-  In case of encoding errors for `prefix`, returns `{:error, :notprefix}`
+  In case of encoding errors for `prefix`, returns `{:error, :einval}`
 
   ## Example
 
@@ -306,7 +306,7 @@ defmodule Iptrie do
       {:error, :notfound}
       iex>
       iex> find(ipt, "13.13.13.333")
-      {:error, :notprefix}
+      {:error, :einval}
 
   """
   @spec find(t, prefix) :: {:ok, {prefix, any}} | {:error, atom}
@@ -320,7 +320,7 @@ defmodule Iptrie do
         {bits, value} -> {:ok, {Pfx.marshall(%{pfx | bits: bits}, prefix), value}}
       end
     rescue
-      ArgumentError -> {:error, :notprefix}
+      ArgumentError -> {:error, :einval}
     end
   end
 

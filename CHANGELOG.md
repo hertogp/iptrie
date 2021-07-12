@@ -1,5 +1,9 @@
 # Changelog
 
+# new
+- updated dependencies Radix, Pfx to use >= instead of ~>
+- pulled in Pfx 0.3.0
+
 # 0.3.0
 - added fetch/2, fetch!/2
 - added find/2, find!/2
