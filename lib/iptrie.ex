@@ -47,7 +47,7 @@ defmodule Iptrie do
   @doc """
   Create an new, empty Iptrie.
 
-  ## Example
+  ## Examples
 
       iex> Iptrie.new()
       %Iptrie{}
@@ -212,8 +212,8 @@ defmodule Iptrie do
   @doc """
   Fetches the prefix,value-pair for given `prefix` from `trie` (exact match).
 
-  In case of success, returns {:ok, {prefix, value}}.  
-  If `prefix` is not present, returns `{:error, :notfound}`.  
+  In case of success, returns `{:ok, {prefix, value}}`.
+  If `prefix` is not present, returns `{:error, :notfound}`.
   In case of encoding errors for `prefix`, returns `{:error, :einval}`
 
   ## Example
@@ -250,8 +250,8 @@ defmodule Iptrie do
   @doc """
   Fetches the prefix,value-pair for given `prefix` from `trie` (exact match).
 
-  In case of success, returns {prefix, value}.  
-  If `prefix` is not present, raises a `KeyError`.  
+  In case of success, returns `{prefix, value}`.
+  If `prefix` is not present, raises a `KeyError`.
   If `prefix` could not be encoded, raises an `ArgumentError`.
 
   ## Example
@@ -289,8 +289,8 @@ defmodule Iptrie do
   @doc """
   Finds a prefix,value-pair for given `prefix` from `trie` (longest match).
 
-  In case of success, returns {:ok, {prefix, value}}.  
-  If `prefix` had no match, returns `{:error, :notfound}`.  
+  In case of success, returns `{:ok, {prefix, value}}`.
+  If `prefix` had no match, returns `{:error, :notfound}`.
   In case of encoding errors for `prefix`, returns `{:error, :einval}`
 
   ## Example
@@ -327,8 +327,8 @@ defmodule Iptrie do
   @doc """
   Finds a prefix,value-pair for given `prefix` from `trie` (longest match).
 
-  In case of success, returns {prefix, value}.  
-  If `prefix` had no match, raises a `KeyError`.  
+  In case of success, returns `{prefix, value}`.
+  If `prefix` had no match, raises a `KeyError`.
   If `prefix` could not be encoded, raises an `ArgumentError`.
 
   ## Example
@@ -555,10 +555,10 @@ defmodule Iptrie do
   @doc """
   Return the prefix,value-pair, whose prefix is the longest match for given search `prefix`.
 
-  Returns nil if there is no match for search `prefix`.  
+  Returns nil if there is no match for search `prefix`.
   Silently ignores any errors when encoding the given search `prefix` by returning nil.
 
-  ## Example
+  ## Examples
 
   """
   @spec lookup(t(), prefix()) :: {prefix(), any} | nil
@@ -587,7 +587,7 @@ defmodule Iptrie do
   If `prefix` is not valid, or cannot be encoded as an Ipv4 op IPv6 `t:Pfx.t`, nil
   is returned.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/25", "A25-lower")
@@ -634,7 +634,7 @@ defmodule Iptrie do
   If `prefix` is not present or not valid, or cannot be encoded as an Ipv4 op
   IPv6 `t:Pfx.t/0`, an empty list is returned.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/25", "A25-lower")
@@ -678,7 +678,7 @@ defmodule Iptrie do
   specific prefix.  If matched, `fun` is called on its value.  If
   `prefix` had no longest prefix match, the `trie` is returned unchanged.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 0)
@@ -714,7 +714,7 @@ defmodule Iptrie do
   `prefix` had no longest prefix match, the default is inserted and `fun` is
   not called.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> update("1.1.1.0/24", 0, fn x -> x + 1 end)
@@ -749,7 +749,7 @@ defmodule Iptrie do
   If `type` is a list of types, a flat list of all prefix,value-pairs of all
   radix trees of given types is returned.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -788,7 +788,7 @@ defmodule Iptrie do
   @doc """
   Return all prefix,value-pairs from all available radix trees in `trie`.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -821,7 +821,7 @@ defmodule Iptrie do
   If `type` is a list of `type`'s, the `acc` accumulator is updated across all
   radix trees of `type`'s.  Probably not entirely usefull, but there you go.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -854,7 +854,7 @@ defmodule Iptrie do
   @doc """
   Invoke `fun` on all prefix,value-pairs in all radix trees in the `trie`.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -880,7 +880,7 @@ defmodule Iptrie do
   If there is no `Radix` tree for given `type`, an empty radix will be returned
   without storing it in the `trie`.
 
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
