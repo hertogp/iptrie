@@ -36,6 +36,9 @@ argument(s) given, if possible.
     iex>
     iex> lookup(ipt, "1.2.3.128")
     {"1.2.3.0/24", "v4"}
+    iex> lookup(ipt, {{1, 2, 3, 128}, 32})
+    {{{1, 2, 3, 0}, 24}, "v4"}
+    iex>
     iex> lookup(ipt, "acdc:1975::")
     {"acdc:1975:0:0:0:0:0:0/32", "T.N.T"}
     iex>
@@ -84,8 +87,9 @@ prefixes, like e.g. MAC addresses:
 
 ![mac](assets/mac.dot.png)
 
-`Iptrie` recognizes EUI-48 addresses and EUI-64, but only when using '-'s
-as punctuation, otherwise `Pfx` will turn it into an IPv6 prefix.
+`Iptrie` recognizes EUI-48 and EUI-64 prefixes.  Note that EUI-64 using ':' as
+punctuation might come out as an IPv6, in which case `Pfx.from_mac/1` should be
+used to create a prefix before putting it in the tree.
 
 Since prefixes are stored in specific radix trees based on the `maxlen` of
 given prefix, you could also mix IPv4, IPv6, EUI-48, EUI-64 prefixes and
@@ -108,6 +112,6 @@ end
 
 ## Copyright and License
 
-Copyright (c) 2020 hertogp
+Copyright (c) 2021 hertogp
 
 The source code is licensed under the [MIT License](./LICENSE.md).
