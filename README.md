@@ -1,8 +1,11 @@
-# README
+# Iptrie
 
-![Pfx test](https://github.com/hertogp/iptrie/actions/workflows/elixir.yml/badge.svg)
-
-[Online Documentation](https://hexdocs.pm/iptrie).
+[![Test](https://github.com/hertogp/iptrie/actions/workflows/elixir.yml/badge.svg)](https://github.com/hertogp/iptrie/actions/workflows/elixir.yml)
+[![Module Version](https://img.shields.io/hexpm/v/iptrie.svg)](https://hex.pm/packages/iptrie)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/iptrie/)
+[![Total Download](https://img.shields.io/hexpm/dt/iptrie.svg)](https://hex.pm/packages/iptrie)
+[![License](https://img.shields.io/hexpm/l/iptrie.svg)](https://github.com/hertogp/iptrie/blob/master/LICENSE)
+[![Last Updated](https://img.shields.io/github/last-commit/hertogp/iptrie.svg)](https://github.com/hertogp/iptrie/commits/master)
 
 <!-- @MODULEDOC -->
 
@@ -55,7 +58,7 @@ argument(s) given, if possible.
 
 Where the radix trees for the IP prefixes look like:
 
-![ipv4](img/ipv4.dot.png) ![ipv6](img/ipv6.dot.png)
+![ipv4](assets/ipv4.dot.png) ![ipv6](assets/ipv6.dot.png)
 
 ## Others
 
@@ -79,7 +82,7 @@ prefixes, like e.g. MAC addresses:
     ...> |> Radix.dot(label: "MAC OUI", kv_tostr: kv48)
     ...> |> (&File.write("img/mac.dot", &1)).()
 
-![mac](img/mac.dot.png)
+![mac](assets/mac.dot.png)
 
 `Iptrie` recognizes EUI-48 addresses and EUI-64, but only when using '-'s
 as punctuation, otherwise `Pfx` will turn it into an IPv6 prefix.
@@ -92,7 +95,7 @@ possibly others, in a single Iptrie.
 
 ## Installation
 
-[Iptrie](https://hexdocs.pm/iptrie) can be installed by adding `iptrie` to your
+[Iptrie](https://hexdocs.pm/iptrie) can be installed by adding `:iptrie` to your
 list of dependencies in `mix.exs`:
 
 ```elixir
@@ -103,5 +106,8 @@ def deps do
 end
 ```
 
-Repositiory is on [github](https://github.com/hertogp/iptrie).
+## Copyright and License
 
+Copyright (c) 2020 hertogp
+
+The source code is licensed under the [MIT License](./LICENSE.md).
