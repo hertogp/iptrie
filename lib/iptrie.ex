@@ -68,43 +68,6 @@ defmodule Iptrie do
     do: ArgumentError.exception("expected a maxlen (non_neg_integer) value, got #{inspect(arg)}")
 
   # API
-  @doc """
-  Create an new, empty Iptrie.
-
-  ## Examples
-
-      iex> Iptrie.new()
-      %Iptrie{}
-
-
-  """
-  @spec new() :: t()
-  def new,
-    do: %__MODULE__{}
-
-  @doc """
-  Create a new Iptrie, populated via a list of {`t:prefix/0`, `t:any/0`}-pairs.
-
-  ## Example
-
-      iex> elements = [
-      ...>  {"1.1.1.0/24", "net1"},
-      ...>  {{{1, 1, 2, 0}, 24}, "net2"},
-      ...>  {"acdc:1975::/32", "TNT"}
-      ...> ]
-      iex> ipt = Iptrie.new(elements)
-      iex> Map.get(ipt, 32)
-      {0, {22, [{<<1, 1, 1>>, "net1"}], [{<<1, 1, 2>>, "net2"}]}, nil}
-      iex> Map.get(ipt, 128)
-      {0, nil, [{<<172, 220, 25, 117>>, "TNT"}]}
-
-  """
-  @spec new(list({prefix(), any})) :: t
-  def new(elements) when is_list(elements) do
-    Enum.reduce(elements, new(), fn {prefix, value}, trie -> put(trie, prefix, value) end)
-  rescue
-    FunctionClauseError -> raise arg_err(:bad_keyvals, elements)
-  end
 
   @doc """
   Return one or more prefix,value-pair(s) using an exact match for given `prefix(es)`.
@@ -142,59 +105,6 @@ defmodule Iptrie do
   end
 
   def get(trie, _prefix),
-    do: raise(arg_err(:bad_trie, trie))
-
-  @doc """
-  Populate the `trie` with a list of {prefix,value}-pairs.
-
-  This always uses an exact match for *prefix*, updating its *value* if it
-  exists.  Any errors are silently ignored as the trie is always returned.
-
-  ## Example
-
-      iex> ipt = new([{"1.1.1.0/24", 0}, {"1.1.1.1", 0}, {"1.1.1.1", "x"}])
-      iex>
-      iex> get(ipt, "1.1.1.1")
-      {"1.1.1.1", "x"}
-
-  """
-  @spec put(t, list({prefix(), any})) :: t
-  def put(%__MODULE__{} = trie, elements) when is_list(elements),
-    do: Enum.reduce(elements, trie, fn {k, v}, t -> put(t, k, v) end)
-
-  def put(%__MODULE__{} = _trie, elements),
-    do: raise(arg_err(:bad_keyvals, elements))
-
-  def put(trie, _elements),
-    do: raise(arg_err(:bad_trie, trie))
-
-  @doc """
-  Puts `value` under `prefix` in the `trie`.
-
-  This always uses an exact match for `prefix`, replacing its value if it
-  exists.
-
-  ## Example
-
-      iex> ipt = new()
-      ...> |> put("1.1.1.0/24", 0)
-      ...> |> put("1.1.1.1", 1)
-      ...> |> put("1.1.1.1", "x")
-      iex>
-      iex> get(ipt, "1.1.1.1")
-      {"1.1.1.1", "x"}
-
-  """
-  @spec put(t, prefix(), any) :: t
-  def put(%__MODULE__{} = trie, prefix, value) do
-    pfx = Pfx.new(prefix)
-    tree = radix(trie, pfx.maxlen)
-    Map.put(trie, pfx.maxlen, Radix.put(tree, pfx.bits, value))
-  rescue
-    err -> raise err
-  end
-
-  def put(trie, _prefix, _value),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
@@ -567,62 +477,53 @@ defmodule Iptrie do
     |> List.flatten()
   end
 
-  @doc ~S"""
-  Return all the values stored in all radix trees in `trie`.
+  @doc """
+  Return all the prefix,value-pairs whose prefix is a prefix for the given
+  search `prefix`.
+
+  This returns the less specific entries that enclose the given search
+  `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
+  present, the search key will be included in the result.
+
+  If `prefix` is not present an empty list is returned.
 
   ## Example
 
       iex> ipt = new()
-      ...> |> put("1.1.1.0/24", 1)
-      ...> |> put("2.2.2.0/24", 2)
-      ...> |> put("acdc:1975::/32", 3)
-      ...> |> put("acdc:2021::/32", 4)
+      ...> |> put("1.1.1.0/25", "A25-lower")
+      ...> |> put("1.1.1.128/25", "A25-upper")
+      ...> |> put("1.1.1.0/30", "A30")
+      ...> |> put("1.1.2.0/24", "B24")
       iex>
-      iex> values(ipt)
-      [1, 2, 3, 4]
-
-  """
-  @spec values(t) :: list(any)
-  def values(%__MODULE__{} = trie),
-    do: values(trie, types(trie))
-
-  def values(trie),
-    do: raise(arg_err(:bad_trie, trie))
-
-  @doc ~S"""
-  Return the values stored in the radix trees in `trie` for given `type`.
-
-  Where `type` is a either single maxlen or a list thereof.
-
-  ## Example
-
-      iex> ipt = new()
-      ...> |> put("1.1.1.0/24", 1)
-      ...> |> put("2.2.2.0/24", 2)
-      ...> |> put("acdc:1975::/32", 3)
-      ...> |> put("acdc:2021::/32", 4)
-      iex>
-      iex> values(ipt, 32)
-      [1, 2]
-      iex>
-      iex> values(ipt, 128)
-      [3, 4]
-      iex>
-      iex> values(ipt, 48)
+      iex> less(ipt, "1.1.1.0/30")
+      [
+        {"1.1.1.0/30", "A30"},
+        {"1.1.1.0/25", "A25-lower"},
+      ]
+      iex> less(ipt, "2.2.2.2")
       []
-      iex>
-      iex> values(ipt, [32, 48, 128])
-      [1, 2, 3, 4]
 
   """
-  @spec values(t, integer | list(integer)) :: list(any)
-  def values(%__MODULE__{} = trie, type) when is_integer(type),
-    do: radix(trie, type) |> Radix.values()
+  @spec less(t(), prefix()) :: list({prefix(), any})
+  def less(%__MODULE__{} = trie, prefix) do
+    pfx = Pfx.new(prefix)
+    tree = radix(trie, pfx.maxlen)
 
-  def values(%__MODULE__{} = trie, types) when is_list(types) do
-    Enum.map(types, fn type -> values(trie, type) end)
-    |> List.flatten()
+    case Radix.less(tree, pfx.bits) do
+      [] ->
+        []
+
+      list ->
+        Enum.map(list, fn {bits, value} ->
+          {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
+        end)
+    end
+  rescue
+    err -> raise err
   end
+
+  def less(trie, _prefix),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Return the prefix,value-pair, whose prefix is the longest match for given search `prefix`.
@@ -711,135 +612,102 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return all the prefix,value-pairs whose prefix is a prefix for the given
-  search `prefix`.
+  Create an new, empty Iptrie.
 
-  This returns the less specific entries that enclose the given search
-  `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
-  present, the search key will be included in the result.
+  ## Examples
 
-  If `prefix` is not present an empty list is returned.
+      iex> Iptrie.new()
+      %Iptrie{}
+
+
+  """
+  @spec new() :: t()
+  def new(),
+    do: %__MODULE__{}
+
+  @doc """
+  Create a new Iptrie, populated via a list of {`t:prefix/0`, `t:any/0`}-pairs.
+
+  ## Example
+
+      iex> elements = [
+      ...>  {"1.1.1.0/24", "net1"},
+      ...>  {{{1, 1, 2, 0}, 24}, "net2"},
+      ...>  {"acdc:1975::/32", "TNT"}
+      ...> ]
+      iex> ipt = Iptrie.new(elements)
+      iex> Map.get(ipt, 32)
+      {0, {22, [{<<1, 1, 1>>, "net1"}], [{<<1, 1, 2>>, "net2"}]}, nil}
+      iex> Map.get(ipt, 128)
+      {0, nil, [{<<172, 220, 25, 117>>, "TNT"}]}
+
+  """
+  @spec new(list({prefix(), any})) :: t
+  def new(elements) when is_list(elements) do
+    Enum.reduce(elements, new(), fn {prefix, value}, trie -> put(trie, prefix, value) end)
+  rescue
+    FunctionClauseError -> raise arg_err(:bad_keyvals, elements)
+  end
+
+  @doc """
+  Populate the `trie` with a list of {prefix,value}-pairs.
+
+  This always uses an exact match for *prefix*, updating its *value* if it
+  exists.  Any errors are silently ignored as the trie is always returned.
+
+  ## Example
+
+      iex> ipt = new([{"1.1.1.0/24", 0}, {"1.1.1.1", 0}, {"1.1.1.1", "x"}])
+      iex>
+      iex> get(ipt, "1.1.1.1")
+      {"1.1.1.1", "x"}
+
+  """
+  @spec put(t, list({prefix(), any})) :: t
+  def put(%__MODULE__{} = trie, elements) when is_list(elements),
+    do: Enum.reduce(elements, trie, fn {k, v}, t -> put(t, k, v) end)
+
+  def put(%__MODULE__{} = _trie, elements),
+    do: raise(arg_err(:bad_keyvals, elements))
+
+  def put(trie, _elements),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Puts `value` under `prefix` in the `trie`.
+
+  This always uses an exact match for `prefix`, replacing its value if it
+  exists.
 
   ## Example
 
       iex> ipt = new()
-      ...> |> put("1.1.1.0/25", "A25-lower")
-      ...> |> put("1.1.1.128/25", "A25-upper")
-      ...> |> put("1.1.1.0/30", "A30")
-      ...> |> put("1.1.2.0/24", "B24")
-      iex>
-      iex> less(ipt, "1.1.1.0/30")
-      [
-        {"1.1.1.0/30", "A30"},
-        {"1.1.1.0/25", "A25-lower"},
-      ]
-      iex> less(ipt, "2.2.2.2")
-      []
-
-  """
-  @spec less(t(), prefix()) :: list({prefix(), any})
-  def less(%__MODULE__{} = trie, prefix) do
-    pfx = Pfx.new(prefix)
-    tree = radix(trie, pfx.maxlen)
-
-    case Radix.less(tree, pfx.bits) do
-      [] ->
-        []
-
-      list ->
-        Enum.map(list, fn {bits, value} ->
-          {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
-        end)
-    end
-  rescue
-    err -> raise err
-  end
-
-  def less(trie, _prefix),
-    do: raise(arg_err(:bad_trie, trie))
-
-  @doc """
-  Lookup `prefix` and update the matched entry, only if found.
-
-  Uses longest prefix match, so search `prefix` is usually matched by some less
-  specific prefix.  If matched, `fun` is called on its value.  If
-  `prefix` had no longest prefix match, the `trie` is returned unchanged.
-
-  ## Examples
-
-      iex> ipt = new()
       ...> |> put("1.1.1.0/24", 0)
-      ...> |> update("1.1.1.0", fn x -> x + 1 end)
-      ...> |> update("1.1.1.1", fn x -> x + 1 end)
-      ...> |> update("2.2.2.2", fn x -> x + 1 end)
-      iex> get(ipt, "1.1.1.0/24")
-      {"1.1.1.0/24", 2}
-      iex> lookup(ipt, "2.2.2.2")
-      nil
+      ...> |> put("1.1.1.1", 1)
+      ...> |> put("1.1.1.1", "x")
+      iex>
+      iex> get(ipt, "1.1.1.1")
+      {"1.1.1.1", "x"}
 
   """
-  @spec update(t, prefix, (any -> any)) :: t
-  def update(%__MODULE__{} = trie, prefix, fun) when is_function(fun, 1) do
+  @spec put(t, prefix(), any) :: t
+  def put(%__MODULE__{} = trie, prefix, value) do
     pfx = Pfx.new(prefix)
     tree = radix(trie, pfx.maxlen)
-
-    case Radix.lookup(tree, pfx.bits) do
-      nil -> trie
-      {bits, value} -> Map.put(trie, pfx.maxlen, Radix.put(tree, bits, fun.(value)))
-    end
+    Map.put(trie, pfx.maxlen, Radix.put(tree, pfx.bits, value))
   rescue
     err -> raise err
   end
 
-  def update(%__MODULE__{} = _trie, _prefix, fun),
-    do: raise(arg_err(:bad_fun, {fun, 1}))
-
-  def update(trie, _prefix, _fun),
+  def put(trie, _prefix, _value),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Lookup `prefix` and, if found,  update its value or insert the default.
+  Return the radix tree for given `type` or a new empty tree.
 
-  Uses longest prefix match, so search `prefix` is usually matched by some less
-  specific prefix.  If matched, `fun` is called on the entry's value.  If
-  `prefix` had no longest prefix match, the default is inserted and `fun` is
-  not called.
+  If there is no `Radix` tree for given `type`, an empty radix will be returned.
 
-  ## Examples
-
-      iex> ipt = new()
-      ...> |> update("1.1.1.0/24", 0, fn x -> x + 1 end)
-      ...> |> update("1.1.1.0", 0, fn x -> x + 1 end)
-      ...> |> update("1.1.1.1", 0, fn x -> x + 1 end)
-      ...> |> update("2.2.2.2", 0, fn x -> x + 1 end)
-      iex> lookup(ipt, "1.1.1.2")
-      {"1.1.1.0/24", 2}
-      iex>
-      iex> # probably not what you wanted:
-      iex>
-      iex> lookup(ipt, "2.2.2.2")
-      {"2.2.2.2", 0}
-
-  """
-  @spec update(t, prefix, any, (any -> any)) :: t
-  def update(%__MODULE__{} = trie, prefix, default, fun) when is_function(fun, 1) do
-    pfx = Pfx.new(prefix)
-    tree = radix(trie, pfx.maxlen)
-    Map.put(trie, pfx.maxlen, Radix.update(tree, pfx.bits, default, fun))
-  rescue
-    err -> raise err
-  end
-
-  def update(%__MODULE__{} = _trie, _prefix, _default, fun),
-    do: raise(arg_err(:bad_fun, {fun, 1}))
-
-  def update(trie, _prefix, _default, _fun),
-    do: raise(arg_err(:bad_trie, trie))
-
-  @doc """
-  Return all prefix,value-pairs from all available radix trees in `trie`.
-
-  ## Examples
+  ## Example
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -847,71 +715,26 @@ defmodule Iptrie do
       ...> |> put("acdc:1975::/32", 3)
       ...> |> put("acdc:2021::/32", 4)
       iex>
-      iex> to_list(ipt)
-      [
-        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
-        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2},
-        {%Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128}, 3},
-        {%Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}, 4}
-      ]
-
-  """
-  @spec to_list(t) :: list({prefix, any})
-  def to_list(%__MODULE__{} = trie),
-    do: to_list(trie, types(trie))
-
-  def to_list(trie),
-    do: raise(arg_err(:bad_trie, trie))
-
-  @doc """
-  Returns the prefix,value-pairs from the radix trees in `trie` for given
-  `type`(s).
-
-  If the radix tree for `type` does not exist, an empty list is returned.
-  If `type` is a list of types, a flat list of all prefix,value-pairs of all
-  radix trees of given types is returned.
-
-  ## Examples
-
-      iex> ipt = new()
-      ...> |> put("1.1.1.0/24", 1)
-      ...> |> put("2.2.2.0/24", 2)
-      ...> |> put("acdc:1975::/32", 3)
-      ...> |> put("acdc:2021::/32", 4)
+      iex> radix(ipt, 32)
+      {0, {6, [{<<1, 1, 1>>, 1}], [{<<2, 2, 2>>, 2}]}, nil}
       iex>
-      iex> to_list(ipt, 32)
-      [
-        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
-        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2}
-      ]
-      iex> to_list(ipt, [32, 48, 128])
-      [
-        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
-        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2},
-        {%Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128}, 3},
-        {%Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}, 4}
-      ]
+      iex> radix(ipt, 128)
+      {0, nil, {18, [{<<172, 220, 25, 117>>, 3}], [{<<172, 220, 32, 33>>, 4}]}}
+      iex> radix(ipt, 48)
+      {0, nil, nil}
+      iex>
+      iex> has_type?(ipt, 48)
+      false
 
   """
-  @spec to_list(t, non_neg_integer | list(non_neg_integer)) :: list({prefix, any})
-  def to_list(%__MODULE__{} = trie, type) when is_integer(type) do
-    # and type >= 0 do
-    tree = radix(trie, type)
+  @spec radix(t, integer) :: Radix.tree()
+  def radix(%__MODULE__{} = trie, type) when is_integer(type) and type >= 0,
+    do: Map.get(trie, type) || Radix.new()
 
-    Radix.to_list(tree)
-    |> Enum.map(fn {bits, value} -> {Pfx.new(bits, type), value} end)
-  end
+  def radix(%__MODULE__{} = _trie, type),
+    do: raise(arg_err(:bad_type, type))
 
-  def to_list(%__MODULE__{} = trie, types) when is_list(types) do
-    types
-    |> Enum.map(fn type -> to_list(trie, type) end)
-    |> List.flatten()
-  end
-
-  def to_list(%__MODULE__{} = _trie, types),
-    do: raise(arg_err(:bad_types, types))
-
-  def to_list(trie, _types),
+  def radix(trie, _type),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
@@ -995,11 +818,9 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return the radix tree for given `type` or a new empty tree.
+  Return all prefix,value-pairs from all available radix trees in `trie`.
 
-  If there is no `Radix` tree for given `type`, an empty radix will be returned.
-
-  ## Example
+  ## Examples
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -1007,26 +828,20 @@ defmodule Iptrie do
       ...> |> put("acdc:1975::/32", 3)
       ...> |> put("acdc:2021::/32", 4)
       iex>
-      iex> radix(ipt, 32)
-      {0, {6, [{<<1, 1, 1>>, 1}], [{<<2, 2, 2>>, 2}]}, nil}
-      iex>
-      iex> radix(ipt, 128)
-      {0, nil, {18, [{<<172, 220, 25, 117>>, 3}], [{<<172, 220, 32, 33>>, 4}]}}
-      iex> radix(ipt, 48)
-      {0, nil, nil}
-      iex>
-      iex> has_type?(ipt, 48)
-      false
+      iex> to_list(ipt)
+      [
+        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
+        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2},
+        {%Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128}, 3},
+        {%Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}, 4}
+      ]
 
   """
-  @spec radix(t, integer) :: Radix.tree()
-  def radix(%__MODULE__{} = trie, type) when is_integer(type) and type >= 0,
-    do: Map.get(trie, type) || Radix.new()
+  @spec to_list(t) :: list({prefix, any})
+  def to_list(%__MODULE__{} = trie),
+    do: to_list(trie, types(trie))
 
-  def radix(%__MODULE__{} = _trie, type),
-    do: raise(arg_err(:bad_type, type))
-
-  def radix(trie, _type),
+  def to_list(trie),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
@@ -1045,4 +860,190 @@ defmodule Iptrie do
 
   def types(trie),
     do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Returns the prefix,value-pairs from the radix trees in `trie` for given
+  `type`(s).
+
+  If the radix tree for `type` does not exist, an empty list is returned.
+  If `type` is a list of types, a flat list of all prefix,value-pairs of all
+  radix trees of given types is returned.
+
+  ## Examples
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> to_list(ipt, 32)
+      [
+        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
+        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2}
+      ]
+      iex> to_list(ipt, [32, 48, 128])
+      [
+        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
+        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2},
+        {%Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128}, 3},
+        {%Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}, 4}
+      ]
+
+  """
+  @spec to_list(t, non_neg_integer | list(non_neg_integer)) :: list({prefix, any})
+  def to_list(%__MODULE__{} = trie, type) when is_integer(type) do
+    # and type >= 0 do
+    tree = radix(trie, type)
+
+    Radix.to_list(tree)
+    |> Enum.map(fn {bits, value} -> {Pfx.new(bits, type), value} end)
+  end
+
+  def to_list(%__MODULE__{} = trie, types) when is_list(types) do
+    types
+    |> Enum.map(fn type -> to_list(trie, type) end)
+    |> List.flatten()
+  end
+
+  def to_list(%__MODULE__{} = _trie, types),
+    do: raise(arg_err(:bad_types, types))
+
+  def to_list(trie, _types),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Lookup `prefix` and update the matched entry, only if found.
+
+  Uses longest prefix match, so search `prefix` is usually matched by some less
+  specific prefix.  If matched, `fun` is called on its value.  If
+  `prefix` had no longest prefix match, the `trie` is returned unchanged.
+
+  ## Examples
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 0)
+      ...> |> update("1.1.1.0", fn x -> x + 1 end)
+      ...> |> update("1.1.1.1", fn x -> x + 1 end)
+      ...> |> update("2.2.2.2", fn x -> x + 1 end)
+      iex> get(ipt, "1.1.1.0/24")
+      {"1.1.1.0/24", 2}
+      iex> lookup(ipt, "2.2.2.2")
+      nil
+
+  """
+  @spec update(t, prefix, (any -> any)) :: t
+  def update(%__MODULE__{} = trie, prefix, fun) when is_function(fun, 1) do
+    pfx = Pfx.new(prefix)
+    tree = radix(trie, pfx.maxlen)
+
+    case Radix.lookup(tree, pfx.bits) do
+      nil -> trie
+      {bits, value} -> Map.put(trie, pfx.maxlen, Radix.put(tree, bits, fun.(value)))
+    end
+  rescue
+    err -> raise err
+  end
+
+  def update(%__MODULE__{} = _trie, _prefix, fun),
+    do: raise(arg_err(:bad_fun, {fun, 1}))
+
+  def update(trie, _prefix, _fun),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Lookup `prefix` and, if found,  update its value or insert the default.
+
+  Uses longest prefix match, so search `prefix` is usually matched by some less
+  specific prefix.  If matched, `fun` is called on the entry's value.  If
+  `prefix` had no longest prefix match, the default is inserted and `fun` is
+  not called.
+
+  ## Examples
+
+      iex> ipt = new()
+      ...> |> update("1.1.1.0/24", 0, fn x -> x + 1 end)
+      ...> |> update("1.1.1.0", 0, fn x -> x + 1 end)
+      ...> |> update("1.1.1.1", 0, fn x -> x + 1 end)
+      ...> |> update("2.2.2.2", 0, fn x -> x + 1 end)
+      iex> lookup(ipt, "1.1.1.2")
+      {"1.1.1.0/24", 2}
+      iex>
+      iex> # probably not what you wanted:
+      iex>
+      iex> lookup(ipt, "2.2.2.2")
+      {"2.2.2.2", 0}
+
+  """
+  @spec update(t, prefix, any, (any -> any)) :: t
+  def update(%__MODULE__{} = trie, prefix, default, fun) when is_function(fun, 1) do
+    pfx = Pfx.new(prefix)
+    tree = radix(trie, pfx.maxlen)
+    Map.put(trie, pfx.maxlen, Radix.update(tree, pfx.bits, default, fun))
+  rescue
+    err -> raise err
+  end
+
+  def update(%__MODULE__{} = _trie, _prefix, _default, fun),
+    do: raise(arg_err(:bad_fun, {fun, 1}))
+
+  def update(trie, _prefix, _default, _fun),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc ~S"""
+  Return all the values stored in all radix trees in `trie`.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> values(ipt)
+      [1, 2, 3, 4]
+
+  """
+  @spec values(t) :: list(any)
+  def values(%__MODULE__{} = trie),
+    do: values(trie, types(trie))
+
+  def values(trie),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc ~S"""
+  Return the values stored in the radix trees in `trie` for given `type`.
+
+  Where `type` is a either single maxlen or a list thereof.
+
+  ## Example
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> values(ipt, 32)
+      [1, 2]
+      iex>
+      iex> values(ipt, 128)
+      [3, 4]
+      iex>
+      iex> values(ipt, 48)
+      []
+      iex>
+      iex> values(ipt, [32, 48, 128])
+      [1, 2, 3, 4]
+
+  """
+  @spec values(t, integer | list(integer)) :: list(any)
+  def values(%__MODULE__{} = trie, type) when is_integer(type),
+    do: radix(trie, type) |> Radix.values()
+
+  def values(%__MODULE__{} = trie, types) when is_list(types) do
+    Enum.map(types, fn type -> values(trie, type) end)
+    |> List.flatten()
+  end
 end
