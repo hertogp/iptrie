@@ -36,10 +36,6 @@ defmodule Iptrie do
 
   # Helpers
 
-  @spec types(t) :: [non_neg_integer]
-  defp types(%Iptrie{} = trie),
-    do: Map.keys(trie) |> Enum.filter(fn x -> is_integer(x) end)
-
   @spec arg_err(atom, any) :: Exception.t()
   defp arg_err(:bad_keyvals, arg),
     do: ArgumentError.exception("expected a valid {key,value}-list, got #{inspect(arg)}")
@@ -55,6 +51,12 @@ defmodule Iptrie do
 
   defp arg_err(:bad_fun, {fun, arity}),
     do: ArgumentError.exception("expected a function/#{arity}, got #{inspect(fun)}")
+
+  defp arg_err(:bad_types, arg),
+    do: ArgumentError.exception("expected a list of maxlen's, got #{inspect(arg)}")
+
+  defp arg_err(:bad_type, arg),
+    do: ArgumentError.exception("expected a maxlen (non_neg_integer) value, got #{inspect(arg)}")
 
   # API
   @doc """
@@ -278,7 +280,7 @@ defmodule Iptrie do
   @spec fetch(t, prefix, keyword) :: {:ok, {prefix, any}} | {:error, atom}
   def fetch(trie, prefix, opts \\ [])
 
-  def fetch(%Iptrie{} = trie, prefix, opts) do
+  def fetch(%__MODULE__{} = trie, prefix, opts) do
     pfx = Pfx.new(prefix)
     tree = radix(trie, pfx.maxlen)
 
@@ -425,14 +427,14 @@ defmodule Iptrie do
 
   """
   @spec filter(t, (bitstring, non_neg_integer, any -> boolean)) :: t
-  def filter(%Iptrie{} = trie, fun) when is_function(fun, 3) do
+  def filter(%__MODULE__{} = trie, fun) when is_function(fun, 3) do
     types(trie)
     |> Enum.map(fn type -> {type, filterp(radix(trie, type), type, fun)} end)
     |> Enum.filter(fn {_t, rdx} -> not Radix.empty?(rdx) end)
     |> Enum.reduce(Iptrie.new(), fn {type, rdx}, ipt -> Map.put(ipt, type, rdx) end)
   end
 
-  def filter(%Iptrie{} = _trie, fun),
+  def filter(%__MODULE__{} = _trie, fun),
     do: raise(arg_err(:bad_fun, {fun, 3}))
 
   def filter(trie, _fun),
@@ -476,7 +478,7 @@ defmodule Iptrie do
 
   """
   @spec keys(t) :: list(prefix)
-  def keys(%Iptrie{} = trie),
+  def keys(%__MODULE__{} = trie),
     do: keys(trie, types(trie))
 
   def keys(trie),
@@ -520,13 +522,13 @@ defmodule Iptrie do
 
   """
   @spec keys(t, integer | list(integer)) :: list(prefix)
-  def keys(%Iptrie{} = trie, type) when is_integer(type) do
+  def keys(%__MODULE__{} = trie, type) when is_integer(type) do
     radix(trie, type)
     |> Radix.keys()
     |> Enum.map(fn bits -> Pfx.new(bits, type) end)
   end
 
-  def keys(%Iptrie{} = trie, types) when is_list(types) do
+  def keys(%__MODULE__{} = trie, types) when is_list(types) do
     Enum.map(types, fn type -> keys(trie, type) end)
     |> List.flatten()
   end
@@ -547,7 +549,7 @@ defmodule Iptrie do
 
   """
   @spec values(t) :: list(any)
-  def values(%Iptrie{} = trie),
+  def values(%__MODULE__{} = trie),
     do: values(trie, types(trie))
 
   def values(trie),
@@ -580,10 +582,10 @@ defmodule Iptrie do
 
   """
   @spec values(t, integer | list(integer)) :: list(any)
-  def values(%Iptrie{} = trie, type) when is_integer(type),
+  def values(%__MODULE__{} = trie, type) when is_integer(type),
     do: radix(trie, type) |> Radix.values()
 
-  def values(%Iptrie{} = trie, types) when is_list(types) do
+  def values(%__MODULE__{} = trie, types) when is_list(types) do
     Enum.map(types, fn type -> values(trie, type) end)
     |> List.flatten()
   end
@@ -610,7 +612,7 @@ defmodule Iptrie do
       iex> lookup(ipt, "3.3.3.3")
       nil
       iex> lookup(ipt, "3.3.3.300")
-      nil
+      ** (ArgumentError) expected a ipv4/ipv6 CIDR or EUI-48/64 string, got "3.3.3.300"
 
   """
   @spec lookup(t(), prefix()) :: {prefix(), any} | nil
@@ -623,7 +625,7 @@ defmodule Iptrie do
       {bits, value} -> {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
     end
   rescue
-    ArgumentError -> nil
+    err -> raise err
   end
 
   def lookup(trie, _prefix),
@@ -637,10 +639,7 @@ defmodule Iptrie do
   `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
   present, the search `prefix` will be included in the result.
 
-  If `prefix` is not valid, or cannot be encoded as an Ipv4 op IPv6 `t:Pfx.t`, nil
-  is returned.
-
-  ## Examples
+  ## Example
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/25", "A25-lower")
@@ -671,8 +670,11 @@ defmodule Iptrie do
         end)
     end
   rescue
-    ArgumentError -> []
+    err -> raise err
   end
+
+  def more(trie, _prefix),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Return all the prefix,value-pairs whose prefix is a prefix for the given
@@ -682,8 +684,7 @@ defmodule Iptrie do
   `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
   present, the search key will be included in the result.
 
-  If `prefix` is not present or not valid, or cannot be encoded as an Ipv4 op
-  IPv6 `t:Pfx.t/0`, an empty list is returned.
+  If `prefix` is not present an empty list is returned.
 
   ## Example
 
@@ -717,10 +718,11 @@ defmodule Iptrie do
         end)
     end
   rescue
-    ArgumentError -> []
+    err -> raise err
   end
 
-  # TODO: raise arg_err(:bad_trie, trie)
+  def less(trie, _prefix),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Lookup `prefix` and update the matched entry, only if found.
@@ -752,10 +754,14 @@ defmodule Iptrie do
       {bits, value} -> Map.put(trie, pfx.maxlen, Radix.put(tree, bits, fun.(value)))
     end
   rescue
-    ArgumentError -> trie
+    err -> raise err
   end
 
-  # TODO: raise arg_err's for bad_fun or bad_trie
+  def update(%__MODULE__{} = _trie, _prefix, fun),
+    do: raise(arg_err(:bad_fun, {fun, 1}))
+
+  def update(trie, _prefix, _fun),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Lookup `prefix` and, if found,  update its value or insert the default.
@@ -787,10 +793,41 @@ defmodule Iptrie do
     tree = radix(trie, pfx.maxlen)
     Map.put(trie, pfx.maxlen, Radix.update(tree, pfx.bits, default, fun))
   rescue
-    ArgumentError -> trie
+    err -> raise err
   end
 
-  # TODO: raise arg_err's
+  def update(%__MODULE__{} = _trie, _prefix, _default, fun),
+    do: raise(arg_err(:bad_fun, {fun, 1}))
+
+  def update(trie, _prefix, _default, _fun),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Return all prefix,value-pairs from all available radix trees in `trie`.
+
+  ## Examples
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> to_list(ipt)
+      [
+        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
+        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2},
+        {%Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128}, 3},
+        {%Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}, 4}
+      ]
+
+  """
+  @spec to_list(t) :: list({prefix, any})
+  def to_list(%__MODULE__{} = trie),
+    do: to_list(trie, types(trie))
+
+  def to_list(trie),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Returns the prefix,value-pairs from the radix trees in `trie` for given
@@ -823,47 +860,25 @@ defmodule Iptrie do
 
   """
   @spec to_list(t, non_neg_integer | list(non_neg_integer)) :: list({prefix, any})
-  def to_list(%Iptrie{} = trie, type) when is_integer(type) do
+  def to_list(%__MODULE__{} = trie, type) when is_integer(type) do
+    # and type >= 0 do
     tree = radix(trie, type)
 
     Radix.to_list(tree)
     |> Enum.map(fn {bits, value} -> {Pfx.new(bits, type), value} end)
   end
 
-  def to_list(%Iptrie{} = trie, types) when is_list(types) do
+  def to_list(%__MODULE__{} = trie, types) when is_list(types) do
     types
     |> Enum.map(fn type -> to_list(trie, type) end)
     |> List.flatten()
   end
 
-  # TODO: raise arg_err's
+  def to_list(%__MODULE__{} = _trie, types),
+    do: raise(arg_err(:bad_types, types))
 
-  @doc """
-  Return all prefix,value-pairs from all available radix trees in `trie`.
-
-  ## Examples
-
-      iex> ipt = new()
-      ...> |> put("1.1.1.0/24", 1)
-      ...> |> put("2.2.2.0/24", 2)
-      ...> |> put("acdc:1975::/32", 3)
-      ...> |> put("acdc:2021::/32", 4)
-      iex>
-      iex> to_list(ipt)
-      [
-        {%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, 1},
-        {%Pfx{bits: <<2, 2, 2>>, maxlen: 32}, 2},
-        {%Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128}, 3},
-        {%Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}, 4}
-      ]
-
-  """
-  @spec to_list(t) :: list({prefix, any})
-  def to_list(%Iptrie{} = trie) do
-    to_list(trie, types(trie))
-  end
-
-  # TODO: raise arg_err's
+  def to_list(trie, _types),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Invoke `fun` on each prefix,value-pair in the radix tree for given `type`
@@ -897,10 +912,10 @@ defmodule Iptrie do
   """
   @spec reduce(t, non_neg_integer | list(non_neg_integer), any, (bitstring, any, any -> any)) ::
           any
-  def reduce(%Iptrie{} = trie, type, acc, fun) when is_integer(type) and is_function(fun, 3),
+  def reduce(%__MODULE__{} = trie, type, acc, fun) when is_integer(type) and is_function(fun, 3),
     do: radix(trie, type) |> Radix.reduce(acc, fun)
 
-  def reduce(%Iptrie{} = trie, types, acc, fun) when is_list(types) and is_function(fun, 3) do
+  def reduce(%__MODULE__{} = trie, types, acc, fun) when is_list(types) and is_function(fun, 3) do
     types
     |> Enum.map(fn type -> radix(trie, type) end)
     |> Enum.reduce(acc, fn tree, acc -> Radix.reduce(tree, acc, fun) end)
@@ -925,7 +940,7 @@ defmodule Iptrie do
 
   """
   @spec reduce(t, any, (bitstring, any, any -> any)) :: any
-  def reduce(%Iptrie{} = trie, acc, fun),
+  def reduce(%__MODULE__{} = trie, acc, fun),
     do: reduce(trie, types(trie), acc, fun)
 
   # TODO: raise arg_err's
@@ -954,8 +969,21 @@ defmodule Iptrie do
 
   """
   @spec radix(t, integer) :: Radix.tree()
-  def radix(%Iptrie{} = trie, type) when is_integer(type),
+  def radix(%__MODULE__{} = trie, type) when is_integer(type) and type >= 0,
     do: Map.get(trie, type) || Radix.new()
 
+  def radix(%__MODULE__{} = _trie, type),
+    do: raise(arg_err(:bad_type, type))
+
+  def radix(trie, _type),
+    do: raise(arg_err(:bad_trie, trie))
+
   # TODO: raise arg_err's
+
+  @spec types(t) :: [non_neg_integer]
+  def types(%__MODULE__{} = trie),
+    do: Map.keys(trie) |> Enum.filter(fn x -> is_integer(x) end)
+
+  def types(trie),
+    do: raise(arg_err(:bad_trie, trie))
 end

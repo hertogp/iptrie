@@ -181,7 +181,7 @@ defmodule IptrieTest do
     assert get(t1, "acdc:1975::/32") == {"acdc:1975:0:0:0:0:0:0/32", 4}
   end
 
-  test "filter/2 raises on invalid input" do
+  test "filter/2 raises on invalid Iptries" do
     t = new()
     f = fn _bits, _maxlen, _value -> false end
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> filter(tree, f) end)
@@ -205,7 +205,7 @@ defmodule IptrieTest do
            ]
   end
 
-  test "keys/1 raises on invalid input" do
+  test "keys/1 raises on invalid Iptries" do
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> keys(tree) end)
   end
 
@@ -214,12 +214,171 @@ defmodule IptrieTest do
     assert values(@test_trie) |> Enum.sort() == [1, 2, 3, 4, 5, 6, 7, 8, 9]
   end
 
-  test "values/1 raises on invalid input" do
+  test "values/1 raises on invalid Iptries" do
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> values(tree) end)
   end
 
   # Iptrie.lookup/2
-  test "lookup/2 raises on invalid Iptries" do
+  test "lookup/2 uses longest prefix matching" do
+    t = @test_trie
+    assert lookup(t, "1.1.1.1") == {"1.1.1.0/25", 2}
+    assert lookup(t, "acdc:1976::1") == {"acdc:1976:0:0:0:0:0:0/32", 5}
+    assert lookup(t, "11-22-33-44-55-66") == {"11-22-33-00-00-00/24", 6}
+    assert lookup(t, "11-22-33-44-55-67-01-02") == {"11-22-33-44-55-67-00-00/48", 9}
+  end
+
+  test "lookup/2 raises on invalid input" do
+    t = @test_trie
+    for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> lookup(t, pfx) end)
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> lookup(tree, "1.1.1.1") end)
+  end
+
+  # Iptrie.more/2
+  test "more/2 gets all more specifics from the trie" do
+    t = @test_trie
+
+    assert more(t, "1.1.1.0/24") == [
+             {"1.1.1.0/25", 2},
+             {"1.1.1.0/24", 1},
+             {"1.1.1.128/25", 3}
+           ]
+
+    assert more(t, "11-22-33-44-55-00-00-00/40") == [
+             {"11-22-33-44-55-67-00-00/48", 9},
+             {"11-22-33-44-55-66-00-00/48", 8}
+           ]
+  end
+
+  test "more/2 raises on invalid input" do
+    t = new()
+    for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> more(t, pfx) end)
+    for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> more(tree, "0.0.0.0/0") end)
+  end
+
+  # Iptrie.less/2
+
+  test "less/2 returns all less specifics" do
+    t = @test_trie
+
+    assert less(t, "1.1.1.1") == [
+             {"1.1.1.0/25", 2},
+             {"1.1.1.0/24", 1}
+           ]
+
+    assert less(t, "1.1.1.255") == [
+             {"1.1.1.128/25", 3},
+             {"1.1.1.0/24", 1}
+           ]
+  end
+
+  test "less/2 raises on invalid input" do
+    t = new()
+    for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> less(t, pfx) end)
+    for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> less(tree, "0.0.0.0/0") end)
+  end
+
+  # Radix.update/3
+  test "update/3 uses longest prefix match to update" do
+    t = @test_trie
+    fun = fn x -> x + 100 end
+
+    t1 =
+      update(t, "1.1.1.255", fun)
+      |> update("11-22-33-44-55-67-99-99", fun)
+
+    assert get(t1, "1.1.1.128/25") == {"1.1.1.128/25", 103}
+    assert get(t1, "11-22-33-44-55-67-00-00/48") == {"11-22-33-44-55-67-00-00/48", 109}
+  end
+
+  test "update/3 does not add if key not found" do
+    t = @test_trie
+    t1 = update(t, "2.2.2.2", fn x -> x + 1 end)
+    assert t == t1
+  end
+
+  test "update/3 raises on invalid input" do
+    t = new()
+    f = fn x -> x end
+    for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> update(t, pfx, f) end)
+
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> update(tree, "0.0.0.0/0", f) end)
+
+    # bad arity
+    assert_raise ArgumentError, fn -> update(t, "0.0.0.0/0", fn x, y -> x + y end) end
+  end
+
+  # Radix.update/4
+  test "update/4 uses longest prefix match to update" do
+    t = @test_trie
+    fun = fn x -> x + 100 end
+    default = 0
+
+    t1 =
+      update(t, "1.1.1.255", default, fun)
+      |> update("11-22-33-44-55-67-99-99", default, fun)
+
+    assert get(t1, "1.1.1.128/25") == {"1.1.1.128/25", 103}
+    assert get(t1, "11-22-33-44-55-67-00-00/48") == {"11-22-33-44-55-67-00-00/48", 109}
+  end
+
+  test "update/4 inserts default value if if key not found" do
+    t = @test_trie
+    t1 = update(t, "2.2.2.2", 0, fn x -> x + 1 end)
+    assert get(t1, "2.2.2.2") == {"2.2.2.2", 0}
+  end
+
+  test "update/4 raises on invalid input" do
+    t = new()
+    f = fn x -> x end
+    default = nil
+
+    for pfx <- @bad_pfx,
+        do: assert_raise(ArgumentError, fn -> update(t, pfx, default, f) end)
+
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> update(tree, "0.0.0.0/0", default, f) end)
+
+    # bad arity
+    assert_raise ArgumentError, fn -> update(t, "0.0.0.0/0", default, fn x, y -> x + y end) end
+  end
+
+  # Radix.to_list/1
+  test "to_list/1 returns list across all radix trees and their entries" do
+    l = to_list(@test_trie)
+    assert length(l) == 9
+    assert Enum.member?(l, {%Pfx{bits: <<1, 1, 1, 1::1>>, maxlen: 32}, 3})
+    assert Enum.member?(l, {%Pfx{bits: <<0xACDC::16, 0x1976::16>>, maxlen: 128}, 5})
+    assert Enum.member?(l, {%Pfx{bits: <<0x11, 0x22, 0x33>>, maxlen: 48}, 6})
+    assert Enum.member?(l, {%Pfx{bits: <<0x11, 0x22, 0x33, 0x44, 0x55, 0x67>>, maxlen: 64}, 9})
+  end
+
+  test "to_list/1 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> to_list(tree) end)
+  end
+
+  test "to_list/2 returns list of one or more radix trees" do
+    l = to_list(@test_trie, 32)
+  end
+
+  test "to_list/2 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> to_list(tree, 32) end)
+
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> to_list(tree, [128]) end)
+
+    # not a list
+    assert_raise ArgumentError, fn -> to_list(@test_trie, {32}) end
+    # not an non_neg_integer
+    assert_raise ArgumentError, fn -> to_list(@test_trie, -32) end
+    # TODO:
+    # - what to do when a type is not present in the trie?
+    # - make types a public function
+    # - has_type?() -> y/n
+    # - has_prefix?() -> y/n
+    #
+    # 
   end
 end
