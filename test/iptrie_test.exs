@@ -360,6 +360,10 @@ defmodule IptrieTest do
 
   test "to_list/2 returns list of one or more radix trees" do
     l = to_list(@test_trie, 32)
+    Enum.all?(l, fn {pfx, _} -> pfx.maxlen == 32 end)
+
+    l = to_list(@test_trie, [48, 64])
+    Enum.all?(l, fn {pfx, _} -> pfx.maxlen in [48, 64] end)
   end
 
   test "to_list/2 raises on invalid input" do
