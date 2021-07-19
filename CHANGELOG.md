@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pulled in `Radix` 0.2.0
 
 ## added
+- `Iptrie.types/1` returns a list of available types or maxlen's in the trie
+- `Iptrie.has_type?/2` says whether or not trie has a given type
+- `Iptrie.radix/2` get a radix tree by type from an Iptrie, or a new empty one
 
 TODO:
 - Iptrie.count/1, return count of entries in the different radix trees
@@ -26,6 +29,7 @@ TODO:
 - Iptrie.pop/3, returns popped pfx,val and new trie
 - Iptrie.dot/3, wraps Radix.dot
 - Iptrie.empty?/2, says if a particular (or all) radix trees are empty
+- Iptrie.has_prefix?/2, says whether given prefix is present in an Iptrie
 
 
 ## v0.3.0 - 2021-07-06

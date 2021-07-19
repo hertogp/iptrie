@@ -14,6 +14,7 @@ defmodule IptrieTest do
   ]
   @bad_trees [42, %{}, {0, nil}, {1, nil, nil}, {nil, nil, nil}, [], nil]
 
+  # change this and you'll need to change a lot of assertions
   @test_trie new()
              |> put("1.1.1.0/24", 1)
              |> put("1.1.1.0/25", 2)
@@ -133,7 +134,7 @@ defmodule IptrieTest do
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> delete(tree, "1.1.1.1") end)
   end
 
-  # Radix.fetch/3
+  # Iptrie.fetch/3
   test "fetch/3 fetches exactly or on longest prefix match" do
     t = @test_trie
     assert {:ok, {"1.1.1.0/24", 1}} == fetch(t, "1.1.1.0/24")
@@ -277,7 +278,7 @@ defmodule IptrieTest do
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> less(tree, "0.0.0.0/0") end)
   end
 
-  # Radix.update/3
+  # Iptrie.update/3
   test "update/3 uses longest prefix match to update" do
     t = @test_trie
     fun = fn x -> x + 100 end
@@ -308,7 +309,7 @@ defmodule IptrieTest do
     assert_raise ArgumentError, fn -> update(t, "0.0.0.0/0", fn x, y -> x + y end) end
   end
 
-  # Radix.update/4
+  # Iptrie.update/4
   test "update/4 uses longest prefix match to update" do
     t = @test_trie
     fun = fn x -> x + 100 end
@@ -343,7 +344,7 @@ defmodule IptrieTest do
     assert_raise ArgumentError, fn -> update(t, "0.0.0.0/0", default, fn x, y -> x + y end) end
   end
 
-  # Radix.to_list/1
+  # Iptrie.to_list/1
   test "to_list/1 returns list across all radix trees and their entries" do
     l = to_list(@test_trie)
     assert length(l) == 9
@@ -373,16 +374,106 @@ defmodule IptrieTest do
     for tree <- @bad_trees,
         do: assert_raise(ArgumentError, fn -> to_list(tree, [128]) end)
 
-    # not a list
+    # bad args
     assert_raise ArgumentError, fn -> to_list(@test_trie, {32}) end
-    # not an non_neg_integer
     assert_raise ArgumentError, fn -> to_list(@test_trie, -32) end
-    # TODO:
-    # - what to do when a type is not present in the trie?
-    # - make types a public function
-    # - has_type?() -> y/n
-    # - has_prefix?() -> y/n
-    #
-    # 
+  end
+
+  # Iptrie.reduce/3
+  test "reduce/3 runs across all radix trees" do
+    t = @test_trie
+    add = fn _k, v, acc -> acc + v end
+    assert reduce(t, 0, add) == 45
+
+    assert reduce(new(), 0, add) == 0
+  end
+
+  test "reduce/3 raises on invalid input" do
+    add = fn _k, v, acc -> acc + v end
+
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> reduce(tree, 0, add) end)
+
+    # bad fun
+    assert_raise ArgumentError, fn -> reduce(new(), 0, fn x -> x end) end
+  end
+
+  # Iptrie.reduce/4
+  test "reduce/4 runs across one or more radix trees" do
+    t = @test_trie
+    add = fn _k, v, acc -> acc + v end
+    assert reduce(t, 32, 0, add) == 6
+    assert reduce(t, 128, 0, add) == 9
+    assert reduce(t, 48, 0, add) == 13
+    assert reduce(t, 64, 0, add) == 17
+
+    # multiple radix trees
+    assert reduce(t, [32, 128], 0, add) == 15
+    assert reduce(t, [48, 64], 0, add) == 30
+    assert reduce(t, [32, 48, 64, 128], 0, add) == 45
+
+    # unknown types are handled
+    assert reduce(t, 3, 0, add) == 0
+    assert reduce(t, [3, 32, 48, 64, 128], 0, add) == 45
+  end
+
+  test "reduce/4 raises on invalid input" do
+    add = fn _k, v, acc -> acc + v end
+
+    # bad_trie
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> reduce(tree, 32, 0, add) end)
+
+    # bad fun
+    assert_raise ArgumentError, fn -> reduce(new(), 32, 0, fn x -> x end) end
+  end
+
+  # Iptrie.radix/2
+  test "radix/2 returns an existing radix tree or an empty one" do
+    alias Radix
+    t = @test_trie
+    r = radix(t, 32)
+    assert Radix.get(r, <<1, 1, 1>>) == {<<1, 1, 1>>, 1}
+    r = radix(t, 48)
+    assert Radix.get(r, <<0x11, 0x22, 0x33>>) == {<<0x11, 0x22, 0x33>>, 6}
+    r = radix(t, 16)
+    assert Radix.empty?(r)
+  end
+
+  test "radix/2 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> radix(tree, 0) end)
+
+    # bad types
+    assert_raise ArgumentError, fn -> radix(new(), -1) end
+    assert_raise ArgumentError, fn -> radix(new(), 32.0) end
+  end
+
+  # Iptrie.types/1
+  test "types/1 returns all types from an Iptrie" do
+    assert types(@test_trie) |> Enum.sort() == [32, 48, 64, 128]
+  end
+
+  test "types/1 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> types(tree) end)
+  end
+
+  # Iptrie.has_type?/2
+  test "has_type?/2 syas yay or nay" do
+    t = @test_trie
+
+    for type <- types(t),
+        do: assert(has_type?(t, type))
+
+    refute has_type?(t, 0)
+  end
+
+  test "has_type?/2 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> has_type?(tree, 0) end)
+
+    assert_raise ArgumentError, fn -> has_type?(new(), 32.0) end
+    assert_raise ArgumentError, fn -> has_type?(new(), -32) end
   end
 end

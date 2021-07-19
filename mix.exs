@@ -53,7 +53,7 @@ defmodule Iptrie.MixProject do
       licenses: ["MIT"],
       maintainers: ["hertogp"],
       links: %{
-        "Changelog" => "https://hexdocs/pm/iptrie/changelog.html",
+        "Changelog" => "https://hexdocs.pm/iptrie/changelog.html",
         "GitHub" => @source_url
       }
     ]

@@ -26,6 +26,12 @@ defmodule Iptrie do
   @type t :: %__MODULE__{}
 
   @typedoc """
+  The type of a prefix is its maxlen property
+
+  """
+  @type type :: non_neg_integer()
+
+  @typedoc """
   A prefix represented as an opague `t:Pfx.t/0` struct, an
   `t:Pfx.ip_address/0`, `t:Pfx.ip_prefix/0`, IP CIDR string or EUI-48/64 string.
 
@@ -33,6 +39,9 @@ defmodule Iptrie do
 
   """
   @type prefix :: Pfx.prefix()
+
+  # Guards
+  defguardp is_type(type) when is_integer(type) and type >= 0
 
   # Helpers
 
@@ -447,6 +456,31 @@ defmodule Iptrie do
 
     Radix.reduce(rdx, Radix.new(), keep)
   end
+
+  @doc """
+  Returns true if `trie` has given `type`, false otherwise.
+
+  An Iptrie groups prefixes into radix trees by their maxlen property, also known
+  as the type of prefix.
+
+  ## Example
+
+  iex> t = new([{"1.1.1.1", 1}])
+  iex> has_type?(t, 32)
+  true
+  iex> has_type?(t, 128)
+  false
+
+  """
+  @spec has_type?(t, type) :: boolean
+  def has_type?(%__MODULE__{} = trie, type) when is_type(type),
+    do: Map.has_key?(trie, type)
+
+  def has_type?(%__MODULE__{} = _trie, type),
+    do: raise(arg_err(:bad_type, type))
+
+  def has_type?(trie, _type),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
   Return all prefixes stored in all available radix trees in `trie`.
@@ -881,12 +915,43 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
+  Invoke `fun` on all prefix,value-pairs in all radix trees in the `trie`.
+
+  The function `fun` is called with the radix key, value and `acc` accumulator
+  and should return an updated accumulator.  The result is the last `acc`
+  accumulator returned.
+
+  ## Examples
+
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/24", 1)
+      ...> |> put("2.2.2.0/24", 2)
+      ...> |> put("acdc:1975::/32", 3)
+      ...> |> put("acdc:2021::/32", 4)
+      iex>
+      iex> reduce(ipt, 0, fn _key, value, acc -> acc + value end)
+      10
+      iex>
+      iex> reduce(ipt, %{}, fn key, value, acc -> Map.put(acc, key, value) end)
+      %{<<1, 1, 1>> => 1, <<2, 2, 2>> => 2, <<172, 220, 25, 117>> => 3, <<172, 220, 32, 33>> => 4}
+
+  """
+  @spec reduce(t, any, (bitstring, any, any -> any)) :: any
+  def reduce(%__MODULE__{} = trie, acc, fun) when is_function(fun, 3) do
+    reduce(trie, types(trie), acc, fun)
+  rescue
+    err -> raise err
+  end
+
+  def reduce(trie, _acc, _fun),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
   Invoke `fun` on each prefix,value-pair in the radix tree for given `type`
 
-  This simply wraps `Radix.reduce/3` for the radix tree in `trie` at given
-  `type`.  The function `fun` is called with the radix key, value and `acc`
-  accumulator and should return an updated accumulator.  The result is the last
-  `acc` accumulator returned.
+  The function `fun` is called with the radix key, value and `acc` accumulator
+  and should return an updated accumulator.  The result is the last `acc`
+  accumulator returned.
 
   If `type` is a list of `type`'s, the `acc` accumulator is updated across all
   radix trees of `type`'s.  Probably not entirely usefull, but there you go.
@@ -910,8 +975,7 @@ defmodule Iptrie do
       10
 
   """
-  @spec reduce(t, non_neg_integer | list(non_neg_integer), any, (bitstring, any, any -> any)) ::
-          any
+  @spec reduce(t, type | list(type), any, (bitstring, any, any -> any)) :: any
   def reduce(%__MODULE__{} = trie, type, acc, fun) when is_integer(type) and is_function(fun, 3),
     do: radix(trie, type) |> Radix.reduce(acc, fun)
 
@@ -921,37 +985,21 @@ defmodule Iptrie do
     |> Enum.reduce(acc, fn tree, acc -> Radix.reduce(tree, acc, fun) end)
   end
 
-  @doc """
-  Invoke `fun` on all prefix,value-pairs in all radix trees in the `trie`.
+  def reduce(%__MODULE__{} = _trie, types, _acc, fun) when is_function(fun, 3),
+    do: raise(arg_err(:bad_types, types))
 
-  ## Examples
+  def reduce(%__MODULE__{} = _trie, _types, _acc, fun),
+    do: raise(arg_err(:bad_fun, {fun, 3}))
 
-      iex> ipt = new()
-      ...> |> put("1.1.1.0/24", 1)
-      ...> |> put("2.2.2.0/24", 2)
-      ...> |> put("acdc:1975::/32", 3)
-      ...> |> put("acdc:2021::/32", 4)
-      iex>
-      iex> reduce(ipt, 0, fn _key, value, acc -> acc + value end)
-      10
-      iex>
-      iex> reduce(ipt, %{}, fn key, value, acc -> Map.put(acc, key, value) end)
-      %{<<1, 1, 1>> => 1, <<2, 2, 2>> => 2, <<172, 220, 25, 117>> => 3, <<172, 220, 32, 33>> => 4}
-
-  """
-  @spec reduce(t, any, (bitstring, any, any -> any)) :: any
-  def reduce(%__MODULE__{} = trie, acc, fun),
-    do: reduce(trie, types(trie), acc, fun)
-
-  # TODO: raise arg_err's
+  def reduce(trie, _types, _acc, _fun),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Return the radix tree for given `type` or a new empty tree.
 
-  If there is no `Radix` tree for given `type`, an empty radix will be returned
-  without storing it in the `trie`.
+  If there is no `Radix` tree for given `type`, an empty radix will be returned.
 
-  ## Examples
+  ## Example
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -966,6 +1014,9 @@ defmodule Iptrie do
       {0, nil, {18, [{<<172, 220, 25, 117>>, 3}], [{<<172, 220, 32, 33>>, 4}]}}
       iex> radix(ipt, 48)
       {0, nil, nil}
+      iex>
+      iex> has_type?(ipt, 48)
+      false
 
   """
   @spec radix(t, integer) :: Radix.tree()
@@ -978,11 +1029,19 @@ defmodule Iptrie do
   def radix(trie, _type),
     do: raise(arg_err(:bad_trie, trie))
 
-  # TODO: raise arg_err's
+  @doc """
+  Return a list of types available in given `trie`.
 
-  @spec types(t) :: [non_neg_integer]
+  ## Example
+
+      iex> new([{"1.1.1.1", 1}, {"2001:db8::", 2}])
+      ...> |> types()
+      [32, 128]
+
+  """
+  @spec types(t) :: [type]
   def types(%__MODULE__{} = trie),
-    do: Map.keys(trie) |> Enum.filter(fn x -> is_integer(x) end)
+    do: Map.keys(trie) |> Enum.filter(fn x -> is_type(x) end)
 
   def types(trie),
     do: raise(arg_err(:bad_trie, trie))
