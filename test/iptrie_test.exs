@@ -122,7 +122,8 @@ defmodule IptrieTest do
   # Iptrie.delete/2
   test "delete/2 deletes using exact match" do
     keys = ["1.1.1.0", "1.1.1.128/25", "acdc:1975::/32", "11-22-33-44-55-67-00-00/48"]
-    t = @test_trie |> delete(keys)
+    t = @test_trie
+    t = Enum.reduce(keys, t, fn pfx, acc -> delete(acc, pfx) end)
     for key <- keys, do: assert(nil == get(t, key))
 
     assert {"1.1.1.0/24", 1} == get(t, "1.1.1.0/24")

@@ -127,10 +127,10 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Delete one or more prefix, value-pairs from the `trie` using an exact match.
+  Delete a prefix,value-pair from the `trie` using an exact match.
 
-  The list of prefixes to delete may contain all _types_, so all sorts of
-  prefixes can be deleted from multiple radix trees in one go.
+  If the `prefix` does not exist in the `trie`, the latter is returned
+  unchanged.
 
   ## Examples
 
@@ -152,28 +152,8 @@ defmodule Iptrie do
       iex> Map.get(ipt, 32) |> Radix.keys()
       [<<2, 2, 2>>]
 
-      iex> ipt = new()
-      ...> |> put("1.1.1.0/24", "one")
-      ...> |> put("2.2.2.0/24", "two")
-      ...> |> put("abba:1973::/32", "Ring Ring")
-      ...> |> put("acdc:1975::/32", "T.N.T")
-      iex>
-      iex> ipt = delete(ipt, ["1.1.1.0/24", "abba:1973::/32"])
-      iex>
-      iex> Map.get(ipt, 32) |> Radix.keys()
-      [<<2, 2, 2>>]
-      iex>
-      iex> Map.get(ipt, 128) |> Radix.keys()
-      [<<0xacdc::16, 0x1975::16>>]
-
   """
-  @spec delete(t, prefix | list(prefix)) :: t
-  def delete(%__MODULE__{} = trie, prefixes) when is_list(prefixes) do
-    Enum.reduce(prefixes, trie, fn pfx, trie -> delete(trie, pfx) end)
-  rescue
-    _ -> raise arg_err(:bad_pfxs, prefixes)
-  end
-
+  @spec delete(t, prefix) :: t
   def delete(%__MODULE__{} = trie, prefix) do
     pfx = Pfx.new(prefix)
     tree = radix(trie, pfx.maxlen)
