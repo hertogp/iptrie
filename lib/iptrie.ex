@@ -1066,7 +1066,7 @@ defmodule Iptrie do
       7
 
   """
-  @spec reduce(t, type | list(type), any, (bitstring, any, any -> any)) :: any
+  @spec reduce(t, type, any, (bitstring, any, any -> any)) :: any
   def reduce(%__MODULE__{} = trie, type, acc, fun) when is_type(type) and is_function(fun, 3) do
     reducer = fn bits, val, acc -> fun.(Pfx.new(bits, type), val, acc) end
 
