@@ -68,9 +68,6 @@ defmodule Iptrie do
   defp arg_err(:bad_fun, {fun, arity}),
     do: ArgumentError.exception("expected a function/#{arity}, got #{inspect(fun)}")
 
-  defp arg_err(:bad_types, arg),
-    do: ArgumentError.exception("expected a list of maxlen's, got #{inspect(arg)}")
-
   defp arg_err(:bad_type, arg),
     do: ArgumentError.exception("expected a maxlen (non_neg_integer) value, got #{inspect(arg)}")
 
@@ -997,8 +994,8 @@ defmodule Iptrie do
       false
 
   """
-  @spec radix(t, integer) :: Radix.tree()
-  def radix(%__MODULE__{} = trie, type) when is_integer(type) and type >= 0,
+  @spec radix(t, type) :: Radix.tree()
+  def radix(%__MODULE__{} = trie, type) when is_type(type),
     do: Map.get(trie, type) || Radix.new()
 
   def radix(%__MODULE__{} = _trie, type),
@@ -1012,7 +1009,7 @@ defmodule Iptrie do
 
   The function `fun` is called with the prefix (a `t:Pfx.t/0` struct), value
   and `acc` accumulator and should return an updated accumulator.  The result
-  is the last `acc` accumulator returned.
+  is the last accumulator returned.
 
   ## Example
 
@@ -1036,7 +1033,8 @@ defmodule Iptrie do
   """
   @spec reduce(t, any, (bitstring, any, any -> any)) :: any
   def reduce(%__MODULE__{} = trie, acc, fun) when is_function(fun, 3) do
-    reduce(trie, types(trie), acc, fun)
+    types(trie)
+    |> Enum.reduce(acc, fn type, acc -> reduce(trie, type, acc, fun) end)
   rescue
     err -> raise err
   end
@@ -1045,15 +1043,12 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Invoke `fun` on each prefix,value-pair in the radix tree for given `type` in
+  Invoke `fun` on each prefix,value-pair in the radix tree of given `type` in
   `trie`.
 
   The function `fun` is called with the prefix (a `t:Pfx.t/0` struct), value and
   `acc` accumulator and should return an updated accumulator.  The result is
-  the last `acc` accumulator returned.
-
-  If `type` is a list of `type`'s, the `acc` accumulator is updated across all
-  radix trees of type `type`.  Probably not entirely usefull, but there you go.
+  the last accumulator returned.
 
   ## Example
 
@@ -1069,9 +1064,6 @@ defmodule Iptrie do
       0
       iex> reduce(ipt, 128, 0, fn _pfx, value, acc -> acc + value end)
       7
-      iex>
-      iex> reduce(ipt, [32, 48, 128], 0, fn _pfx, value, acc -> acc + value end)
-      10
 
   """
   @spec reduce(t, type | list(type), any, (bitstring, any, any -> any)) :: any
@@ -1082,13 +1074,8 @@ defmodule Iptrie do
     |> Radix.reduce(acc, reducer)
   end
 
-  def reduce(%__MODULE__{} = trie, types, acc, fun) when is_list(types) and is_function(fun, 3) do
-    types
-    |> Enum.reduce(acc, fn type, acc -> reduce(trie, type, acc, fun) end)
-  end
-
-  def reduce(%__MODULE__{} = _trie, types, _acc, fun) when is_function(fun, 3),
-    do: raise(arg_err(:bad_types, types))
+  def reduce(%__MODULE__{} = _trie, type, _acc, fun) when is_function(fun, 3),
+    do: raise(arg_err(:bad_type, type))
 
   def reduce(%__MODULE__{} = _trie, _types, _acc, fun),
     do: raise(arg_err(:bad_fun, {fun, 3}))
@@ -1430,8 +1417,8 @@ defmodule Iptrie do
       []
 
   """
-  @spec values(t, type | list(integer)) :: list(any)
-  def values(%__MODULE__{} = trie, type) when is_integer(type),
+  @spec values(t, type) :: list(any)
+  def values(%__MODULE__{} = trie, type) when is_type(type),
     do: radix(trie, type) |> Radix.values()
 
   def values(%__MODULE__{} = _trie, type),

@@ -454,7 +454,7 @@ defmodule IptrieTest do
   end
 
   # Iptrie.reduce/4
-  test "reduce/4 runs across one or more radix trees" do
+  test "reduce/4 runs across one radix trees" do
     t = @test_trie
     add = fn _k, v, acc -> acc + v end
     assert reduce(t, 32, 0, add) == 6
@@ -462,14 +462,8 @@ defmodule IptrieTest do
     assert reduce(t, 48, 0, add) == 13
     assert reduce(t, 64, 0, add) == 17
 
-    # multiple radix trees
-    assert reduce(t, [32, 128], 0, add) == 15
-    assert reduce(t, [48, 64], 0, add) == 30
-    assert reduce(t, [32, 48, 64, 128], 0, add) == 45
-
     # unknown types are handled
     assert reduce(t, 3, 0, add) == 0
-    assert reduce(t, [3, 32, 48, 64, 128], 0, add) == 45
   end
 
   test "reduce/4 raises on invalid input" do
