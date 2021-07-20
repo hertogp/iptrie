@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Iptrie.filter/2` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
 - `Iptrie.delete/2` now only deletes a single prefix, use `Iptrie.drop/2` to delete a list of prefixes.
 - `Iptrie.get/3` replaces Iptrie.get/2 and now only retrieves a single prefix,value-pair
+- `Iptrie.keys/2` returns keys for a single type only
+- `Iptrie.to_list/2` returns prefix,value-pairs for a single type only
+- `Iptrie.values/2` returns values for a single radix tree type only
 
 ## added
 - `Iptrie.types/1`, returns a list of available types or maxlen's in the trie

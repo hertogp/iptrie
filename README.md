@@ -34,10 +34,14 @@ argument(s) given, if possible.
     ...> |> put("0.0.0.0/0", "v4 default")
     ...> |> put("::/0", "no dynamite")
     iex>
+    iex> # 3 longest prefix match that find the same prefix
     iex> lookup(ipt, "1.2.3.128")
     {"1.2.3.0/24", "v4"}
     iex> lookup(ipt, {{1, 2, 3, 128}, 32})
     {{{1, 2, 3, 0}, 24}, "v4"}
+    iex>
+    iex> lookup(ipt, %Pfx{bits: <<1, 2, 3, 128>>, maxlen: 32})
+    {%Pfx{bits: <<1, 2, 3>>, maxlen: 32}, "v4"}
     iex>
     iex> lookup(ipt, "acdc:1975::")
     {"acdc:1975:0:0:0:0:0:0/32", "T.N.T"}

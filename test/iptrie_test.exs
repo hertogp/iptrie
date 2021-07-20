@@ -240,6 +240,19 @@ defmodule IptrieTest do
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> keys(tree) end)
   end
 
+  # Iptrie.keys/2
+  test "keys/2 returns all keys for given type of radix tree" do
+    assert keys(@test_trie, 32) == [
+             %Pfx{bits: <<1, 1, 1, 0::size(1)>>, maxlen: 32},
+             %Pfx{bits: "\x01\x01\x01", maxlen: 32},
+             %Pfx{bits: <<1, 1, 1, 1::size(1)>>, maxlen: 32}
+           ]
+  end
+
+  test "keys/2 raises on invalid Iptries" do
+    for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> keys(tree, 32) end)
+  end
+
   # Iptrie.values/1
   test "values/1 returns all values of all radix trees" do
     assert values(@test_trie) |> Enum.sort() == [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -247,6 +260,22 @@ defmodule IptrieTest do
 
   test "values/1 raises on invalid Iptries" do
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> values(tree) end)
+  end
+
+  # Iptrie.values/2
+  test "values/2 returns all values for a radix trees of given type" do
+    assert values(@test_trie, 32) |> Enum.sort() == [1, 2, 3]
+    assert values(@test_trie, 48) |> Enum.sort() == [6, 7]
+    assert values(@test_trie, 64) |> Enum.sort() == [8, 9]
+    assert values(@test_trie, 128) |> Enum.sort() == [4, 5]
+    assert values(@test_trie, 15) == []
+  end
+
+  test "values/2 raises on invalid input" do
+    for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> values(tree, 32) end)
+
+    assert_raise ArgumentError, fn -> values(@test_trie, -1) end
+    assert_raise ArgumentError, fn -> values(@test_trie, [32]) end
   end
 
   # Iptrie.lookup/2
@@ -389,22 +418,18 @@ defmodule IptrieTest do
         do: assert_raise(ArgumentError, fn -> to_list(tree) end)
   end
 
-  test "to_list/2 returns list of one or more radix trees" do
+  test "to_list/2 returns list prefixes of a radix tree of given type" do
     l = to_list(@test_trie, 32)
     Enum.all?(l, fn {pfx, _} -> pfx.maxlen == 32 end)
 
-    l = to_list(@test_trie, [48, 64])
-    Enum.all?(l, fn {pfx, _} -> pfx.maxlen in [48, 64] end)
+    assert to_list(@test_trie, 13) == []
   end
 
   test "to_list/2 raises on invalid input" do
     for tree <- @bad_trees,
         do: assert_raise(ArgumentError, fn -> to_list(tree, 32) end)
 
-    for tree <- @bad_trees,
-        do: assert_raise(ArgumentError, fn -> to_list(tree, [128]) end)
-
-    # bad args
+    # bad type's
     assert_raise ArgumentError, fn -> to_list(@test_trie, {32}) end
     assert_raise ArgumentError, fn -> to_list(@test_trie, -32) end
   end
