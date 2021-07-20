@@ -17,16 +17,17 @@ defmodule Iptrie do
   `maxlen: 32`, IPv6 has `maxlen: 128`, MAC addresses have `maxlen: 48` and so
   on.
 
-  Although Iptrie facilitates lpm lookups of any type of prefix, it has a bias
-  towards IP prefixes. So, any binaries (strings) are interpreted as IPv4 CIDR/IPv6
-  strings while tuples of address digits and/or {address-digits, length} are
+  Although Iptrie facilitates (exact or longest prefix match) lookups of any
+  type of prefix, it has a bias towards IP prefixes. So, any binaries (strings)
+  are first interpreted as IPv4 CIDR/IPv6 strings and as EUI-48/64 string
+  second, while tuples of address digits and/or {address-digits, length} are
   interpreted as IPv4 or IPv6 representations.
 
   """
   @type t :: %__MODULE__{}
 
   @typedoc """
-  The type of a prefix is its maxlen property
+  The type of a prefix is its maxlen property.
 
   """
   @type type :: non_neg_integer()
@@ -123,7 +124,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Delete a prefix,value-pair from `trie` using an exact match for `prefix`.
+  Deletes a prefix,value-pair from `trie` using an exact match for `prefix`.
 
   If the `prefix` does not exist in the `trie`, the latter is returned
   unchanged.
@@ -184,7 +185,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return true if the given `trie` is empty, false otherwise
+  Returns true if the given `trie` is empty, false otherwise.
 
   ## Examples
 
@@ -207,7 +208,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return true if the radix tree for given `type` in `trie` is empty, false otherwise
+  Returns true if the radix tree for given `type` in `trie` is empty, false otherwise.
 
   ## Example
 
@@ -325,7 +326,7 @@ defmodule Iptrie do
   end
 
   @doc """
-  Find a prefix,value-pair for given `prefix` from `trie` using a longest
+  Finds a prefix,value-pair for given `prefix` from `trie` using a longest
   prefix match.
 
   Convenience wrapper for `Iptrie.fetch/3` with `match: :lpm`.
@@ -354,7 +355,7 @@ defmodule Iptrie do
   end
 
   @doc """
-  Find a prefix,value-pair for given `prefix` from `trie` using a longest
+  Finds a prefix,value-pair for given `prefix` from `trie` using a longest
   prefix match.
 
   Convenience wrapper for `Iptrie.fetch!/3` with `match: :lpm`.
@@ -387,7 +388,7 @@ defmodule Iptrie do
   end
 
   @doc ~S"""
-  Returns a new Iptrie, keeping only the entries for which `fun` returns
+  Returns a new Iptrie, keeping only the prefix,value-pairs for which `fun` returns
   _truthy_.
 
   The signature for `fun` is (prefix, value -> boolean), where the value is
@@ -439,7 +440,7 @@ defmodule Iptrie do
   end
 
   @doc """
-  Return the prefix,value-pair stored under given `prefix` in `trie`,  using an
+  Returns the prefix,value-pair stored under given `prefix` in `trie`,  using an
   exact match.
 
   If `prefix` is not found, `default` is returned. If `default` is not
@@ -537,7 +538,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Return all prefixes stored in all available radix trees in `trie`.
+  Returns all prefixes stored in all available radix trees in `trie`.
 
   The prefixes are reconstructed as `t:Pfx.t/0` by combining the stored bitstrings
   with the `Radix`-tree's type, that is the maxlen property associated with the
@@ -579,7 +580,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Return the  prefixes stored in the radix tree in `trie` for given `type`.
+  Returns the  prefixes stored in the radix tree in `trie` for given `type`.
 
   Note that the Iptrie keys are returned as `t:Pfx.t/0` structs.
 
@@ -621,7 +622,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return all the prefix,value-pairs whose prefix is a prefix for the given
+  Returns all the prefix,value-pairs whose prefix is a prefix for the given
   search `prefix`.
 
   This returns the less specific entries that enclose the given search
@@ -667,7 +668,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return the prefix,value-pair, whose prefix is the longest match for given search `prefix`.
+  Returns the prefix,value-pair, whose prefix is the longest match for given search `prefix`.
 
   Returns `nil` if there is no match for search `prefix`.
 
@@ -707,7 +708,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Merge `trie1` and `trie2` into a new Iptrie.
+  Merges `trie1` and `trie2` into a new Iptrie.
 
   Adds all prefix,value-pairs of `trie2` to `trie1`, overwriting any existing
   entries when prefixes match (based on exact match).
@@ -741,7 +742,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie2))
 
   @doc ~S"""
-  Merge `trie1` and `trie2` into a new Iptrie, resolving conflicts through `fun`.
+  Merges `trie1` and `trie2` into a new Iptrie, resolving conflicts through `fun`.
 
   In cases where a prefix is present in both tries, the conflict is resolved by calling
   `fun` with the prefix (a `t:Pfx.t/0`), its value in `trie1` and its value in
@@ -789,7 +790,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie2))
 
   @doc """
-  Return all the prefix,value-pairs where the search `prefix` is a prefix for
+  Returns all the prefix,value-pairs where the search `prefix` is a prefix for
   the stored prefix.
 
   This returns the more specific entries that are enclosed by given search
@@ -834,7 +835,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Create an new, empty Iptrie.
+  Creates an new, empty Iptrie.
 
   ## Example
 
@@ -848,7 +849,7 @@ defmodule Iptrie do
     do: %__MODULE__{}
 
   @doc """
-  Create a new Iptrie, populated via a list of prefix,value-pairs.
+  Creates a new Iptrie, populated via a list of prefix,value-pairs.
 
   ## Example
 
@@ -917,7 +918,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Put the prefix,value-pairs in `elements` into `trie`.
+  Puts the prefix,value-pairs in `elements` into `trie`.
 
   This always uses an exact match for prefix, updating its value if it exists.
 
@@ -969,7 +970,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return the `Radix` tree for given `type` in `trie`.
+  Returns the `Radix` tree for given `type` in `trie`.
 
   If `trie` has no radix tree for given `type` it will return a new empty radix
   tree.
@@ -1005,7 +1006,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Invoke `fun` on all prefix,value-pairs in all radix trees in `trie`.
+  Invokes `fun` on all prefix,value-pairs in all radix trees in `trie`.
 
   The function `fun` is called with the prefix (a `t:Pfx.t/0` struct), value
   and `acc` accumulator and should return an updated accumulator.  The result
@@ -1031,7 +1032,7 @@ defmodule Iptrie do
       }
 
   """
-  @spec reduce(t, any, (bitstring, any, any -> any)) :: any
+  @spec reduce(t, any, (Pfx.t(), any, any -> any)) :: any
   def reduce(%__MODULE__{} = trie, acc, fun) when is_function(fun, 3) do
     types(trie)
     |> Enum.reduce(acc, fn type, acc -> reduce(trie, type, acc, fun) end)
@@ -1043,7 +1044,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Invoke `fun` on each prefix,value-pair in the radix tree of given `type` in
+  Invokes `fun` on each prefix,value-pair in the radix tree of given `type` in
   `trie`.
 
   The function `fun` is called with the prefix (a `t:Pfx.t/0` struct), value and
@@ -1066,7 +1067,7 @@ defmodule Iptrie do
       7
 
   """
-  @spec reduce(t, type, any, (bitstring, any, any -> any)) :: any
+  @spec reduce(t, type, any, (Pfx.t(), any, any -> any)) :: any
   def reduce(%__MODULE__{} = trie, type, acc, fun) when is_type(type) and is_function(fun, 3) do
     reducer = fn bits, val, acc -> fun.(Pfx.new(bits, type), val, acc) end
 
@@ -1084,7 +1085,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Split `trie` into two Iptries using given list of `prefixes`.
+  Splits `trie` into two Iptries using given list of `prefixes`.
 
   Returns a new trie with prefix,value-pairs that were matched by given
   `prefixes` and the old trie with those pairs removed.  If a prefix was not
@@ -1140,7 +1141,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return a new Iptrie containing only given `prefixes` that were found in `trie`.
+  Returns a new Iptrie containing only given `prefixes` that were found in `trie`.
 
   If a given prefix does not exist, it is ignored.  Optionally specifiy `match:
   :lpm` to use a longest prefix match instead of exact, which is the default.
@@ -1198,7 +1199,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return all prefix,value-pairs from all available radix trees in `trie`.
+  Returns all prefix,value-pairs from all available radix trees in `trie`.
 
   ## Examples
 
@@ -1273,7 +1274,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return a list of types available in given `trie`.
+  Returns a list of types available in given `trie`.
 
   ## Example
 
@@ -1290,7 +1291,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Lookup `prefix` and update the matched entry, only if found.
+  Looks up `prefix` and update the matched entry, only if found.
 
   Uses longest prefix match, so search `prefix` is usually matched by some less
   specific prefix.  If matched, `fun` is called on its value.  If
@@ -1329,7 +1330,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Lookup `prefix` and, if found,  update its value or insert the `default`
+  Looks up `prefix` and, if found,  update its value or insert the `default`
   under `prefix`.
 
   Uses longest prefix match, so search `prefix` is usually matched by some less
@@ -1368,7 +1369,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Return all the values stored in all radix trees in `trie`.
+  Returns all the values stored in all radix trees in `trie`.
 
   ## Example
 
@@ -1395,7 +1396,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Return the values stored in the radix trees in `trie` for given `type`.
+  Returns the values stored in the radix trees in `trie` for given `type`.
 
   Where `type` is a either single maxlen or a list thereof.
 

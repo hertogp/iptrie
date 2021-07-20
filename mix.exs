@@ -12,7 +12,7 @@ defmodule Iptrie.MixProject do
   # mix hex.publish
 
   @source_url "https://github.com/hertogp/iptrie"
-  @version "0.3.0"
+  @version "0.4.0"
 
   def project do
     [

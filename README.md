@@ -11,10 +11,10 @@
 
 IP lookup, with longest prefix match, for IPv4, IPv6 prefixes (and others).
 
-Iptrie manages multiple `Radix` trees, one for each type of
-`t:Pfx.t/0` prefix used as determined by their `maxlen` property.  That way,
-IPv4 prefixes (`maxlen: 32`) use a different radix tree as opposed to e.g. IPv6
-(`maxlen: 128`).
+Iptrie manages multiple `Radix` trees, one for each type of prefix used as
+determined by their `maxlen` property after encoding it as a `t:Pfx.t/0`
+struct.  That way, IPv4 prefixes (`maxlen: 32`) use a different radix tree as
+opposed to IPv6 (`maxlen: 128`) or other types.
 
 Iptrie has a bias towards IPv4, IPv6, EUI-48 and EUI-64, since it uses `Pfx` to
 convert arguments to a `t:Pfx.t/0` struct.  Other types of prefixes will
@@ -22,7 +22,7 @@ require the actual `t:Pfx.t/0` structs as arguments for the various Iptrie
 functions.
 
 Like `Pfx`, Iptrie tries to mirror the representation of results to the
-argument(s) given, if possible.
+arguments given, if possible.
 
 ## IPv4/IPv6
 
@@ -34,7 +34,7 @@ argument(s) given, if possible.
     ...> |> put("0.0.0.0/0", "v4 default")
     ...> |> put("::/0", "no dynamite")
     iex>
-    iex> # 3 longest prefix match that find the same prefix
+    iex> # 3 longest prefix matches that find the same prefix
     iex> lookup(ipt, "1.2.3.128")
     {"1.2.3.0/24", "v4"}
     iex> lookup(ipt, {{1, 2, 3, 128}, 32})
@@ -46,7 +46,7 @@ argument(s) given, if possible.
     iex> lookup(ipt, "acdc:1975::")
     {"acdc:1975:0:0:0:0:0:0/32", "T.N.T"}
     iex>
-    iex> # separate trees, separate default routes
+    iex> # separate trees, separate default "routes"
     iex> lookup(ipt, "10.11.12.13")
     {"0.0.0.0/0", "v4 default"}
     iex> lookup(ipt, "abba::")
@@ -63,7 +63,7 @@ argument(s) given, if possible.
     ...> |> (&File.write("img/ipv6.dot", &1)).()
 
 
-Where the radix trees for the IP prefixes look like:
+The radix trees in the example above look like this:
 
 ![ipv4](assets/ipv4.dot.png) ![ipv6](assets/ipv6.dot.png)
 
@@ -93,7 +93,7 @@ prefixes, like e.g. MAC addresses:
 
 `Iptrie` recognizes EUI-48 and EUI-64 prefixes.  Note that EUI-64 using ':' as
 punctuation might come out as an IPv6, in which case `Pfx.from_mac/1` should be
-used to create a prefix before putting it in the tree.
+used to create a prefix before putting it in the trie.
 
 Since prefixes are stored in specific radix trees based on the `maxlen` of
 given prefix, you could also mix IPv4, IPv6, EUI-48, EUI-64 prefixes and
@@ -109,7 +109,7 @@ list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:iptrie, "~> 0.3.0"}
+    {:iptrie, "~> 0.4.0"}
   ]
 end
 ```
