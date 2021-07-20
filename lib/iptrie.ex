@@ -530,9 +530,7 @@ defmodule Iptrie do
   """
   @spec has_prefix?(t, prefix) :: boolean
   def has_prefix?(%__MODULE__{} = trie, prefix) do
-    pfx = Pfx.new(prefix)
-
-    case get(trie, pfx) do
+    case get(trie, prefix) do
       nil -> false
       _ -> true
     end
