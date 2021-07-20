@@ -61,16 +61,20 @@ defmodule IptrieTest do
     for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> new([{pfx, 0}]) end)
   end
 
-  # Iptrie.get/2
-  test "get/2 uses exact match on correct radix tree" do
+  # Iptrie.get/3
+  test "get/3 uses exact match on correct radix tree" do
     t = @test_trie
     assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", 1}
     assert get(t, "acdc:1976::/32") == {"acdc:1976:0:0:0:0:0:0/32", 5}
     assert get(t, "11-22-33-00-00-00/24") == {"11-22-33-00-00-00/24", 6}
     assert get(t, "11-22-33-44-55-67-00-00/48") == {"11-22-33-44-55-67-00-00/48", 9}
+
+    # in case of no match, returns default if provided, nil otherwise
+    assert get(t, "2.2.2.2") == nil
+    assert get(t, "2.2.2.2", :notfound) == :notfound
   end
 
-  test "get/2 raises on invalid input" do
+  test "get/3 raises on invalid input" do
     t = new()
     for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> get(t, pfx) end)
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> get(tree, "1.1.1.1") end)
@@ -199,7 +203,7 @@ defmodule IptrieTest do
   # Iptrie.filter/2
   test "filter/2 filters based on bits, maxlen and/or value" do
     t = @test_trie
-    t1 = filter(t, fn _bits, _maxlen, val -> val in [1, 2, 3, 4] end)
+    t1 = filter(t, fn _pfx, val -> val in [1, 2, 3, 4] end)
     assert Radix.count(radix(t1, 32)) == 3
     assert Radix.count(radix(t1, 128)) == 1
     assert get(t1, "1.1.1.0/24") == {"1.1.1.0/24", 1}
@@ -210,10 +214,10 @@ defmodule IptrieTest do
 
   test "filter/2 raises on invalid Iptries" do
     t = new()
-    f = fn _bits, _maxlen, _value -> false end
+    f = fn _pfx, _value -> false end
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> filter(tree, f) end)
 
-    # raises if fun doesn't have arity 3
+    # raises if fun doesn't have arity 2
     assert_raise ArgumentError, fn -> filter(t, fn x -> x end) end
   end
 

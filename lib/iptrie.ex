@@ -18,8 +18,8 @@ defmodule Iptrie do
   on.
 
   Although Iptrie facilitates lpm lookups of any type of prefix, it has a bias
-  towards IP prefixes. So, any binaries (strings) are interpreted as
-  CIDR-strings and tuples of address digits and/or {address-digits, length} are
+  towards IP prefixes. So, any binaries (strings) are interpreted as IPv4 CIDR/IPv6
+  strings while tuples of address digits and/or {address-digits, length} are
   interpreted as IPv4 or IPv6 representations.
 
   """
@@ -32,10 +32,8 @@ defmodule Iptrie do
   @type type :: non_neg_integer()
 
   @typedoc """
-  A prefix represented as an opague `t:Pfx.t/0` struct, an
-  `t:Pfx.ip_address/0`, `t:Pfx.ip_prefix/0`, IP CIDR string or EUI-48/64 string.
-
-  See: `Pfx`.
+  A prefix represented as an `t:Pfx.t/0` struct, an `t:Pfx.ip_address/0`,
+  `t:Pfx.ip_prefix/0` or a string in IPv4 CIDR, IPv6, EUI-48 or EUI-64 format.
 
   """
   @type prefix :: Pfx.prefix()
@@ -79,9 +77,9 @@ defmodule Iptrie do
   # API
 
   @doc """
-  Returns the number of entries in given `trie`.
+  Returns the number of prefix,value-pairs in given `trie`.
 
-  Note that this requires traversal of radix trees present.
+  Note that this requires traversal of radix tree(s) present in `trie`.
 
   ## Example
 
@@ -100,9 +98,10 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Returns the number of entries for given `type` in the `trie`.
+  Returns the number of prefix,value-pairs for given `type` in the `trie`.
 
-  Returns `0` is given `type` does not exist in the `trie`.
+  If `trie` has no radix tree of given `type`, `0` is returned.  Use
+  `Iptrie.has_type?/2` to check if a trie holds a given type.
 
   ## Example
 
@@ -112,8 +111,8 @@ defmodule Iptrie do
       iex> count(t, 128)
       1
       iex> types(t)
-      ...> |> Enum.map(fn type -> count(t, type) end)
-      [1, 1]
+      ...> |> Enum.map(fn type -> {type, count(t, type)} end)
+      [{32, 1}, {128, 1}]
 
   """
   @spec count(t, type) :: non_neg_integer
@@ -126,7 +125,7 @@ defmodule Iptrie do
   def count(trie, _type),
     do: raise(arg_err(:bad_trie, trie))
 
-  @doc """
+  @doc ~S"""
   Delete a prefix,value-pair from the `trie` using an exact match.
 
   If the `prefix` does not exist in the `trie`, the latter is returned
@@ -138,19 +137,12 @@ defmodule Iptrie do
       ...> |> put("1.1.1.0/24", "one")
       ...> |> put("2.2.2.0/24", "two")
       iex>
-      iex> lookup(ipt, "1.1.1.1")
-      {"1.1.1.0/24", "one"}
-      iex>
-      iex> Map.get(ipt, 32) |> Radix.keys()
-      [<<1, 1, 1>>, <<2, 2, 2>>]
+      iex> for pfx <- keys(ipt), do: "#{pfx}"
+      ["1.1.1.0/24", "2.2.2.0/24"]
       iex>
       iex> ipt = delete(ipt, "1.1.1.0/24")
-      iex>
-      iex> lookup(ipt, "1.1.1.1")
-      nil
-      iex>
-      iex> Map.get(ipt, 32) |> Radix.keys()
-      [<<2, 2, 2>>]
+      iex> for pfx <- keys(ipt), do: "#{pfx}"
+      ["2.2.2.0/24"]
 
   """
   @spec delete(t, prefix) :: t
@@ -175,7 +167,7 @@ defmodule Iptrie do
       # drop 2 existing prefixes and ignore the third
       iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"11-22-33-00-00-00/24", 3}])
       iex> t2 = drop(t, ["1.1.1.0/24", "11-22-33-00-00-00/24", "3.3.3.3"])
-      iex> keys(t2) |> Enum.map(fn pfx -> "#{pfx}" end)
+      iex> for pfx <- keys(t2), do: "#{pfx}"
       ["2.2.2.0/24"]
 
   """
@@ -199,12 +191,12 @@ defmodule Iptrie do
 
   ## Examples
 
-     iex> t = new([{"1.1.1.1", 1}, {"11-22-33-44-55-66", 2}])
-     iex> empty?(t)
-     false
+       iex> t = new([{"1.1.1.1", 1}, {"11-22-33-44-55-66", 2}])
+       iex> empty?(t)
+       false
 
-     iex> new() |> empty?()
-     true
+       iex> new() |> empty?()
+       true
 
   """
   @spec empty?(t) :: boolean
@@ -222,13 +214,13 @@ defmodule Iptrie do
 
   ## Example
 
-     iex> t = new([{"1.1.1.1", 1}, {"11-22-33-44-55-66", 2}])
-     iex> empty?(t, 32)
-     false
-     iex> empty?(t, 48)
-     false
-     iex> empty?(t, 128)
-     true
+       iex> t = new([{"1.1.1.1", 1}, {"11-22-33-44-55-66", 2}])
+       iex> empty?(t, 32)
+       false
+       iex> empty?(t, 48)
+       false
+       iex> empty?(t, 128)
+       true
 
   """
   @spec empty?(t, type) :: boolean
@@ -292,7 +284,7 @@ defmodule Iptrie do
   # raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Fetches the prefix,value-pair for given `prefix` from `trie` (exact match).
+  Fetches the prefix,value-pair for given `prefix` from `trie`.
 
   In case of success, returns `{prefix, value}`.
   If `prefix` is not present, raises a `KeyError`.
@@ -400,15 +392,10 @@ defmodule Iptrie do
   @doc ~S"""
   Returns a new Iptrie, keeping only the entries for which `fun` returns _truthy_.
 
-  The signature for `fun` is (key, maxlen, value -> boolean), where the (radix)
-  key is the original bitstring of the prefix of type maxlen, used to store some
-  value in that particular radix tree in given `trie`.
+  The signature for `fun` is (prefix, value -> boolean), where the value is stored
+  under prefix in the trie.
 
   Radix trees that are empty, are removed from the new Iptrie.
-
-  Note that, if need be, `Pfx.new(key, maxlen)` reconstructs the original
-  prefix used to store the value in the `trie`.
-
 
   ## Example
 
@@ -419,11 +406,11 @@ defmodule Iptrie do
       ...> |> put("abba:1976::/32", "pop")
       ...> |> put("1.1.1.0/24", "v4")
       iex>
-      iex> filter(ipt, fn _bits, maxlen, _value -> maxlen == 32 end)
+      iex> filter(ipt, fn pfx, _value -> pfx.maxlen == 32 end)
       ...> |> to_list()
       [{%Pfx{bits: <<1, 1, 1>>, maxlen: 32}, "v4"}]
       iex>
-      iex> filter(ipt, fn _bits, _max, value -> value == "rock" end)
+      iex> filter(ipt, fn _pfx, value -> value == "rock" end)
       ...> |> to_list()
       ...> |> Enum.map(fn {pfx, value} -> {"#{pfx}", value} end)
       [
@@ -432,8 +419,8 @@ defmodule Iptrie do
       ]
 
   """
-  @spec filter(t, (bitstring, non_neg_integer, any -> boolean)) :: t
-  def filter(%__MODULE__{} = trie, fun) when is_function(fun, 3) do
+  @spec filter(t, (prefix, any -> boolean)) :: t
+  def filter(%__MODULE__{} = trie, fun) when is_function(fun, 2) do
     types(trie)
     |> Enum.map(fn type -> {type, filterp(radix(trie, type), type, fun)} end)
     |> Enum.filter(fn {_t, rdx} -> not Radix.empty?(rdx) end)
@@ -448,14 +435,18 @@ defmodule Iptrie do
 
   defp filterp(rdx, type, fun) do
     keep = fn key, val, acc ->
-      if fun.(key, type, val), do: Radix.put(acc, key, val), else: acc
+      if fun.(%Pfx{bits: key, maxlen: type}, val), do: Radix.put(acc, key, val), else: acc
     end
 
     Radix.reduce(rdx, Radix.new(), keep)
   end
 
   @doc """
-  Return one or more prefix,value-pair(s) using an exact match for given `prefix(es)`.
+  Return the prefix,value-pair stored under given `prefix` in `trie`,  using an
+  exact match.
+
+  If `prefix` is not found, `default` is returned. If `default` is not
+  provided, nil is used.
 
   ## Examples
 
@@ -464,32 +455,28 @@ defmodule Iptrie do
       iex> get(ipt, "1.1.1.0/31")
       {"1.1.1.0/31", "B"}
       iex>
-      iex> # or get a list of entries
-      iex>
-      iex> get(ipt, ["1.1.1.0/30", "1.1.1.0"])
-      [{"1.1.1.0/30", "A"}, {"1.1.1.0", "C"}]
+      iex> get(ipt, "2.2.2.0/30")
+      nil
+      iex> get(ipt, "2.2.2.0/30", :notfound)
+      :notfound
 
   """
-  @spec get(t, prefix() | list(prefix())) :: {prefix(), any} | nil | list({prefix(), any})
-  def get(%__MODULE__{} = trie, prefixes) when is_list(prefixes) do
-    Enum.map(prefixes, fn prefix -> get(trie, prefix) end)
-  rescue
-    _ -> raise arg_err(:bad_keyvals, prefixes)
-  end
+  @spec get(t, prefix(), any) :: {prefix(), any} | any
+  def get(trie, prefix, default \\ nil)
 
-  def get(%__MODULE__{} = trie, prefix) do
+  def get(%__MODULE__{} = trie, prefix, default) do
     pfx = Pfx.new(prefix)
     tree = radix(trie, pfx.maxlen)
 
     case Radix.get(tree, pfx.bits) do
-      nil -> nil
+      nil -> default
       {bits, value} -> {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
     end
   rescue
     err -> raise err
   end
 
-  def get(trie, _prefix),
+  def get(trie, _prefix, _default),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
@@ -529,11 +516,11 @@ defmodule Iptrie do
 
   ## Example
 
-  iex> t = new([{"1.1.1.1", 1}])
-  iex> has_type?(t, 32)
-  true
-  iex> has_type?(t, 128)
-  false
+      iex> t = new([{"1.1.1.1", 1}])
+      iex> has_type?(t, 32)
+      true
+      iex> has_type?(t, 128)
+      false
 
   """
   @spec has_type?(t, type) :: boolean
@@ -550,7 +537,8 @@ defmodule Iptrie do
   Return all prefixes stored in all available radix trees in `trie`.
 
   The prefixes are reconstructed as `t:Pfx.t/0` by combining the stored bitstrings
-  with the `Radix`-tree's type.e. maxlen property).
+  with the `Radix`-tree's type, that is the maxlen property associated with the
+  radix tree whose keys are being retrieved.
 
   ## Example
 
@@ -583,9 +571,9 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Return the  prefixes stored in the radix tree(s) in `trie` for given `type`.
+  Return the  prefixes stored in the radix tree in `trie` for given `type`.
 
-  Where `type` is a single maxlen or a list thereof.
+  Note that the Iptrie keys are returned as reconstructed `t:Pfx.t/0` structs.
 
   ## Example
 
@@ -862,7 +850,7 @@ defmodule Iptrie do
     do: %__MODULE__{}
 
   @doc """
-  Create a new Iptrie, populated via a list of {`t:prefix/0`, `t:any/0`}-pairs.
+  Create a new Iptrie, populated via a list of prefix,value--pairs.
 
   ## Example
 
@@ -1053,7 +1041,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Invoke `fun` on each prefix,value-pair in the radix tree for given `type`
+  Invoke `fun` on each prefix,value-pair in the radix tree for given `type`.
 
   The function `fun` is called with the radix key, value and `acc` accumulator
   and should return an updated accumulator.  The result is the last `acc`
@@ -1245,23 +1233,6 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return a list of types available in given `trie`.
-
-  ## Example
-
-      iex> t = new([{"1.1.1.1", 1}, {"2001:db8::", 2}])
-      iex> types(t)
-      [32, 128]
-
-  """
-  @spec types(t) :: [type]
-  def types(%__MODULE__{} = trie),
-    do: Map.keys(trie) |> Enum.filter(fn x -> is_type(x) end)
-
-  def types(trie),
-    do: raise(arg_err(:bad_trie, trie))
-
-  @doc """
   Returns the prefix,value-pairs from the radix trees in `trie` for given
   `type`(s).
 
@@ -1310,6 +1281,23 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_types, types))
 
   def to_list(trie, _types),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Return a list of types available in given `trie`.
+
+  ## Example
+
+      iex> t = new([{"1.1.1.1", 1}, {"2001:db8::", 2}])
+      iex> types(t)
+      [32, 128]
+
+  """
+  @spec types(t) :: [type]
+  def types(%__MODULE__{} = trie),
+    do: Map.keys(trie) |> Enum.filter(fn x -> is_type(x) end)
+
+  def types(trie),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """

@@ -12,9 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pulled in `Pfx` 0.5.0
 - Pulled in `Radix` 0.2.0
 - Updated deps with new versions of `Pfx` and `Radix`
-- `Iptrie.reduce/3` the user's callback now takes a `t:Pfx.t/0` instead of bitstring radix key
-- `Iptrie.reduce/4` the user's callback now takes a `t:Pfx.t/0` instead of bitstring radix key
+- `Iptrie.reduce/3` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
+- `Iptrie.reduce/4` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
+- `Iptrie.filter/2` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
 - `Iptrie.delete/2` now only deletes a single prefix, use `Iptrie.drop/2` to delete a list of prefixes.
+- `Iptrie.get/3` replaces Iptrie.get/2 and now only retrieves a single prefix,value-pair
 
 ## added
 - `Iptrie.types/1`, returns a list of available types or maxlen's in the trie
