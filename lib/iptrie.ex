@@ -45,6 +45,15 @@ defmodule Iptrie do
 
   # Helpers
 
+  @spec match(keyword) :: function
+  defp match(opts) do
+    case Keyword.get(opts, :match) do
+      :longest -> &lookup/2
+      :lpm -> &lookup/2
+      _ -> &get/2
+    end
+  end
+
   @spec arg_err(atom, any) :: Exception.t()
   defp arg_err(:bad_keyvals, arg),
     do: ArgumentError.exception("expected a valid {key,value}-list, got #{inspect(arg)}")
@@ -70,41 +79,51 @@ defmodule Iptrie do
   # API
 
   @doc """
-  Return one or more prefix,value-pair(s) using an exact match for given `prefix(es)`.
+  Returns the number of entries in given `trie`.
 
-  ## Examples
+  Note that this requires traversal of radix trees present.
 
-      iex> ipt = new([{"1.1.1.0/30", "A"}, {"1.1.1.0/31", "B"}, {"1.1.1.0", "C"}])
-      iex>
-      iex> get(ipt, "1.1.1.0/31")
-      {"1.1.1.0/31", "B"}
-      iex>
-      iex> # or get a list of entries
-      iex>
-      iex> get(ipt, ["1.1.1.0/30", "1.1.1.0"])
-      [{"1.1.1.0/30", "A"}, {"1.1.1.0", "C"}]
+  ## Example
+
+      iex> t = new([{"1.1.1.1", 1}, {"acdc::", 2}])
+      iex> count(t)
+      2
+  """
+  @spec count(t) :: non_neg_integer()
+  def count(%__MODULE__{} = trie) do
+    types(trie)
+    |> Enum.map(fn type -> count(trie, type) end)
+    |> Enum.sum()
+  end
+
+  def count(trie),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Returns the number of entries for given `type` in the `trie`.
+
+  Returns `0` is given `type` does not exist in the `trie`.
+
+  ## Example
+
+      iex> t = new([{"1.1.1.1", 1}, {"acdc::", 2}])
+      iex> count(t, 32)
+      1
+      iex> count(t, 128)
+      1
+      iex> types(t)
+      ...> |> Enum.map(fn type -> count(t, type) end)
+      [1, 1]
 
   """
-  @spec get(t, prefix() | list(prefix())) :: {prefix(), any} | nil | list({prefix(), any})
-  def get(%__MODULE__{} = trie, prefixes) when is_list(prefixes) do
-    Enum.map(prefixes, fn prefix -> get(trie, prefix) end)
-  rescue
-    _ -> raise arg_err(:bad_keyvals, prefixes)
-  end
+  @spec count(t, type) :: non_neg_integer
+  def count(%__MODULE__{} = trie, type) when is_type(type),
+    do: radix(trie, type) |> Radix.count()
 
-  def get(%__MODULE__{} = trie, prefix) do
-    pfx = Pfx.new(prefix)
-    tree = radix(trie, pfx.maxlen)
+  def count(%__MODULE__{} = _trie, type),
+    do: raise(arg_err(:bad_type, type))
 
-    case Radix.get(tree, pfx.bits) do
-      nil -> nil
-      {bits, value} -> {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
-    end
-  rescue
-    err -> raise err
-  end
-
-  def get(trie, _prefix),
+  def count(trie, _type),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
@@ -166,6 +185,82 @@ defmodule Iptrie do
   def delete(trie, _prefix),
     do: raise(arg_err(:bad_trie, trie))
 
+  @doc ~S"""
+  Drops given `prefixes` from `trie` using an exact match.
+
+  If a given prefix does not exist in `trie` it is ignored.
+
+  ## Example
+
+      # drop 2 existing prefixes and ignore the third
+      iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"11-22-33-00-00-00/24", 3}])
+      iex> t2 = drop(t, ["1.1.1.0/24", "11-22-33-00-00-00/24", "3.3.3.3"])
+      iex> keys(t2) |> Enum.map(fn pfx -> "#{pfx}" end)
+      ["2.2.2.0/24"]
+
+  """
+  @spec drop(t, [prefix]) :: t
+  def drop(%__MODULE__{} = trie, prefixes) when is_list(prefixes) do
+    prefixes
+    |> Enum.map(fn pfx -> Pfx.new(pfx) end)
+    |> Enum.reduce(trie, fn pfx, acc -> delete(acc, pfx) end)
+  rescue
+    err -> raise err
+  end
+
+  def drop(%__MODULE__{} = _trie, prefixes),
+    do: raise(arg_err(:bad_pfxs, prefixes))
+
+  def drop(trie, _prefixes),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Return true if the given `trie` is empty, false otherwise
+
+  ## Examples
+
+     iex> t = new([{"1.1.1.1", 1}, {"11-22-33-44-55-66", 2}])
+     iex> empty?(t)
+     false
+
+     iex> new() |> empty?()
+     true
+
+  """
+  @spec empty?(t) :: boolean
+  def empty?(%__MODULE__{} = trie) do
+    types(trie)
+    |> Enum.map(fn type -> empty?(trie, type) end)
+    |> Enum.all?()
+  end
+
+  def empty?(trie),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Return true if the radix tree for given `type` in `trie` is empty, false otherwise
+
+  ## Example
+
+     iex> t = new([{"1.1.1.1", 1}, {"11-22-33-44-55-66", 2}])
+     iex> empty?(t, 32)
+     false
+     iex> empty?(t, 48)
+     false
+     iex> empty?(t, 128)
+     true
+
+  """
+  @spec empty?(t, type) :: boolean
+  def empty?(%__MODULE__{} = trie, type) when is_type(type),
+    do: radix(trie, type) |> Radix.empty?()
+
+  def empty?(%__MODULE__{} = _trie, type),
+    do: raise(arg_err(:bad_type, type))
+
+  def empty?(trie, _type),
+    do: raise(arg_err(:bad_trie, trie))
+
   @doc """
   Fetches the prefix,value-pair for given `prefix` from `trie`.
 
@@ -223,6 +318,9 @@ defmodule Iptrie do
   If `prefix` is not present, raises a `KeyError`.
   If `prefix` could not be encoded, raises an `ArgumentError`.
 
+  Optionally fetches based on a longest prefix match by specifying `match:
+  :lpm`.
+
   ## Example
 
       iex> ipt = new()
@@ -231,6 +329,9 @@ defmodule Iptrie do
       iex>
       iex> fetch!(ipt, "10.10.10.0/24")
       {"10.10.10.0/24", "ten"}
+      iex>
+      iex> fetch!(ipt, "11.11.11.11", match: :lpm)
+      {"11.11.11.0/24", "eleven"}
       iex>
       iex> fetch!(ipt, "12.12.12.12")
       ** (KeyError) prefix "12.12.12.12" not found
@@ -255,7 +356,7 @@ defmodule Iptrie do
   end
 
   @doc """
-  Fetch a prefix,value-pair for given `prefix` from `trie` using a longest
+  Find a prefix,value-pair for given `prefix` from `trie` using a longest
   prefix match.
 
   Convenience wrapper for `Iptrie.fetch/3` with `match: :lpm`.
@@ -277,11 +378,14 @@ defmodule Iptrie do
 
   """
   @spec find(t, prefix) :: {:ok, {prefix, any}} | {:error, atom}
-  def find(trie, prefix),
-    do: fetch(trie, prefix, match: :lpm)
+  def find(trie, prefix) do
+    fetch(trie, prefix, match: :lpm)
+  rescue
+    err -> raise err
+  end
 
   @doc """
-  Fetch! a prefix,value-pair for given `prefix` from `trie` using a longest
+  Find a prefix,value-pair for given `prefix` from `trie` using a longest
   prefix match.
 
   Convenience wrapper for `Iptrie.fetch!/3` with `match: :lpm`.
@@ -295,6 +399,9 @@ defmodule Iptrie do
       iex> find!(ipt, "10.10.10.0/24")
       {"10.10.10.0/24", "ten"}
       iex>
+      iex> find!(ipt, "10.10.10.10")
+      {"10.10.10.0/24", "ten"}
+      iex>
       iex> find!(ipt, "12.12.12.12")
       ** (KeyError) prefix "12.12.12.12" not found
 
@@ -305,7 +412,7 @@ defmodule Iptrie do
   """
   @spec find!(t, prefix) :: {prefix, any} | KeyError | ArgumentError
   def find!(trie, prefix) do
-    fetch!(trie, prefix)
+    fetch!(trie, prefix, match: :lpm)
   rescue
     err -> raise err
   end
@@ -366,6 +473,75 @@ defmodule Iptrie do
 
     Radix.reduce(rdx, Radix.new(), keep)
   end
+
+  @doc """
+  Return one or more prefix,value-pair(s) using an exact match for given `prefix(es)`.
+
+  ## Examples
+
+      iex> ipt = new([{"1.1.1.0/30", "A"}, {"1.1.1.0/31", "B"}, {"1.1.1.0", "C"}])
+      iex>
+      iex> get(ipt, "1.1.1.0/31")
+      {"1.1.1.0/31", "B"}
+      iex>
+      iex> # or get a list of entries
+      iex>
+      iex> get(ipt, ["1.1.1.0/30", "1.1.1.0"])
+      [{"1.1.1.0/30", "A"}, {"1.1.1.0", "C"}]
+
+  """
+  @spec get(t, prefix() | list(prefix())) :: {prefix(), any} | nil | list({prefix(), any})
+  def get(%__MODULE__{} = trie, prefixes) when is_list(prefixes) do
+    Enum.map(prefixes, fn prefix -> get(trie, prefix) end)
+  rescue
+    _ -> raise arg_err(:bad_keyvals, prefixes)
+  end
+
+  def get(%__MODULE__{} = trie, prefix) do
+    pfx = Pfx.new(prefix)
+    tree = radix(trie, pfx.maxlen)
+
+    case Radix.get(tree, pfx.bits) do
+      nil -> nil
+      {bits, value} -> {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
+    end
+  rescue
+    err -> raise err
+  end
+
+  def get(trie, _prefix),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Returns true if given `prefix` is present in `trie`, false otherwise.
+
+  The check is done based on an exact match.
+
+  ## Example
+
+      iex> t = new([{"1.1.1.1", 1}, {"1.1.1.0/24", 2}, {"acdc::/16", 3}])
+      iex> has_prefix?(t, "1.1.1.2")
+      false
+      iex> has_prefix?(t, "1.1.1.1")
+      true
+      iex> has_prefix?(t, "acdc::/16")
+      true
+
+  """
+  @spec has_prefix?(t, prefix) :: boolean
+  def has_prefix?(%__MODULE__{} = trie, prefix) do
+    pfx = Pfx.new(prefix)
+
+    case get(trie, pfx) do
+      nil -> false
+      _ -> true
+    end
+  rescue
+    err -> raise err
+  end
+
+  def has_prefix?(trie, _prefix),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Returns true if `trie` has given `type`, false otherwise.
@@ -567,6 +743,88 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
+  Merge `trie1` and `trie2` into a new `t:Iptrie.t/0`.
+
+  Adds all prefix,value-pairs of `trie2` to `trie1`, overwriting any existing
+  entries when prefixes match (based on exact match).
+
+  ## Example
+
+      iex> t1 = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}])
+      iex> t2 = new([{"2.2.2.0/24", 22}, {"3.3.3.0/24", 3}])
+      iex> t = merge(t1, t2)
+      iex> count(t)
+      3
+      iex> get(t, "1.1.1.0/24")
+      {"1.1.1.0/24", 1}
+      iex> get(t, "2.2.2.0/24")
+      {"2.2.2.0/24", 22}
+      iex> get(t, "3.3.3.0/24")
+      {"3.3.3.0/24", 3}
+
+  """
+  @spec merge(t, t) :: t
+  def merge(%__MODULE__{} = trie1, %__MODULE__{} = trie2) do
+    reduce(trie2, trie1, fn pfx, val, acc -> put(acc, pfx, val) end)
+  rescue
+    err -> raise err
+  end
+
+  def merge(trie1, %__MODULE__{} = _trie2),
+    do: raise(arg_err(:bad_trie, trie1))
+
+  def merge(_trie1, trie2),
+    do: raise(arg_err(:bad_trie, trie2))
+
+  @doc ~S"""
+  Merge `trie1` and `trie2` into a new `t:Iptrie.t/0`, resolving conflicts through `fun`.
+
+  In cases where a prefix is present in both tries, the conflict is resolved by calling
+  `fun` with the prefix (a `t:Pfx.t/0`), its value in `trie1` and its value in
+  `trie2`.  The function's return value will be stored under the prefix in the
+  merged trie.
+
+  ## Example
+
+       iex> t1 = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"acdc:1975::/32", 3}])
+       iex> t2 = new([{"3.3.3.0/24", 4}, {"2.2.2.0/24", 5}, {"acdc:2021::/32", 6}])
+       iex> t = merge(t1, t2, fn _pfx, v1, v2 -> v1 + v2 end)
+       iex> count(t)
+       5
+       iex> get(t, "2.2.2.0/24")
+       {"2.2.2.0/24", 7}
+       iex> for ip4 <- keys(t, 32), do: "#{ip4}"
+       ["1.1.1.0/24", "2.2.2.0/24", "3.3.3.0/24"]
+       iex> for ip6 <- keys(t, 128), do: "#{ip6}"
+       ["acdc:1975:0:0:0:0:0:0/32", "acdc:2021:0:0:0:0:0:0/32"]
+       iex> values(t) |> Enum.sum()
+       1 + 7 + 3 + 4 + 6
+
+  """
+  @spec merge(t, t, (prefix, any, any -> any)) :: t
+  def merge(%__MODULE__{} = trie1, %__MODULE__{} = trie2, fun) when is_function(fun, 3) do
+    f = fn k2, v2, acc ->
+      case get(trie1, k2) do
+        nil -> put(acc, k2, v2)
+        {^k2, v1} -> put(acc, k2, fun.(k2, v1, v2))
+      end
+    end
+
+    reduce(trie2, trie1, f)
+  rescue
+    err -> raise err
+  end
+
+  def merge(%__MODULE__{} = _trie1, %__MODULE__{} = _trie2, fun),
+    do: raise(arg_err(:bad_fun, {fun, 3}))
+
+  def merge(trie1, %__MODULE__{} = _trie2, _fun),
+    do: raise(arg_err(:bad_trie, trie1))
+
+  def merge(_trie1, trie2, _fun),
+    do: raise(arg_err(:bad_trie, trie2))
+
+  @doc """
   Return all the prefix,value-pairs where the search `prefix` is a prefix for
   the stored prefix.
 
@@ -650,6 +908,50 @@ defmodule Iptrie do
   end
 
   @doc """
+  Removes the value associated with `prefix` and returns the matched prefix,value-pair and the new trie.
+
+  Options include:
+  - `default: value` to return if `prefix` could not be matched (defaults to nil)
+  - `match: :lpm` to match on longest prefix instead of an exact match
+
+  ## Examples
+
+      iex> t = new([{"1.1.1.0/24", 1}, {"1.1.1.99", 2}, {"acdc:1975::/32", 3}])
+      iex> {{"1.1.1.99", 2}, t2} = pop(t, "1.1.1.99")
+      iex> get(t2, "1.1.1.99")
+      nil
+
+      iex> t = new([{"1.1.1.0/24", 1}, {"1.1.1.99", 2}, {"acdc:1975::/32", 3}])
+      iex> # t is unchanged
+      iex> {{"1.1.1.33", :notfound}, ^t} = pop(t, "1.1.1.33", default: :notfound)
+
+      iex> t = new([{"1.1.1.0/24", 1}, {"1.1.1.99", 2}, {"acdc:1975::/32", 3}])
+      iex> # lpm match
+      iex> {{"1.1.1.0/24", 1}, t2} = pop(t, "1.1.1.33", match: :lpm)
+      iex> get(t2, "1.1.1.0/24")
+      nil
+
+  """
+  @spec pop(t, prefix, keyword) :: {{prefix, any}, t}
+  def pop(trie, prefix, opts \\ [])
+
+  def pop(%__MODULE__{} = trie, prefix, opts) do
+    pfx = Pfx.new(prefix)
+    tree = radix(trie, pfx.maxlen)
+    {{bits, val}, rdx} = Radix.pop(tree, pfx.bits, opts)
+
+    {
+      {Pfx.marshall(%{pfx | bits: bits}, prefix), val},
+      Map.put(trie, pfx.maxlen, rdx)
+    }
+  rescue
+    err -> raise err
+  end
+
+  def pop(trie, _prefix, _opts),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
   Populate the `trie` with a list of {prefix,value}-pairs.
 
   This always uses an exact match for *prefix*, updating its *value* if it
@@ -703,9 +1005,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return the radix tree for given `type` or a new empty tree.
-
-  If there is no `Radix` tree for given `type`, an empty radix will be returned.
+  Return the `Radix` tree for given `type` in an Iptrie, or a new empty tree.
 
   ## Example
 
@@ -737,7 +1037,7 @@ defmodule Iptrie do
   def radix(trie, _type),
     do: raise(arg_err(:bad_trie, trie))
 
-  @doc """
+  @doc ~S"""
   Invoke `fun` on all prefix,value-pairs in all radix trees in the `trie`.
 
   The function `fun` is called with the radix key, value and `acc` accumulator
@@ -752,11 +1052,16 @@ defmodule Iptrie do
       ...> |> put("acdc:1975::/32", 3)
       ...> |> put("acdc:2021::/32", 4)
       iex>
-      iex> reduce(ipt, 0, fn _key, value, acc -> acc + value end)
+      iex> reduce(ipt, 0, fn _pfx, value, acc -> acc + value end)
       10
       iex>
-      iex> reduce(ipt, %{}, fn key, value, acc -> Map.put(acc, key, value) end)
-      %{<<1, 1, 1>> => 1, <<2, 2, 2>> => 2, <<172, 220, 25, 117>> => 3, <<172, 220, 32, 33>> => 4}
+      iex> reduce(ipt, %{}, fn pfx, value, acc -> Map.put(acc, "#{pfx}", value) end)
+      %{
+        "1.1.1.0/24" => 1,
+        "2.2.2.0/24" => 2,
+        "acdc:1975:0:0:0:0:0:0/32" => 3,
+        "acdc:2021:0:0:0:0:0:0/32" => 4
+      }
 
   """
   @spec reduce(t, any, (bitstring, any, any -> any)) :: any
@@ -799,13 +1104,16 @@ defmodule Iptrie do
 
   """
   @spec reduce(t, type | list(type), any, (bitstring, any, any -> any)) :: any
-  def reduce(%__MODULE__{} = trie, type, acc, fun) when is_integer(type) and is_function(fun, 3),
-    do: radix(trie, type) |> Radix.reduce(acc, fun)
+  def reduce(%__MODULE__{} = trie, type, acc, fun) when is_type(type) and is_function(fun, 3) do
+    reducer = fn bits, val, acc -> fun.(Pfx.new(bits, type), val, acc) end
+
+    radix(trie, type)
+    |> Radix.reduce(acc, reducer)
+  end
 
   def reduce(%__MODULE__{} = trie, types, acc, fun) when is_list(types) and is_function(fun, 3) do
     types
-    |> Enum.map(fn type -> radix(trie, type) end)
-    |> Enum.reduce(acc, fn tree, acc -> Radix.reduce(tree, acc, fun) end)
+    |> Enum.reduce(acc, fn type, acc -> reduce(trie, type, acc, fun) end)
   end
 
   def reduce(%__MODULE__{} = _trie, types, _acc, fun) when is_function(fun, 3),
@@ -815,6 +1123,120 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_fun, {fun, 3}))
 
   def reduce(trie, _types, _acc, _fun),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Split `trie` into two tries using given list of `prefixes`.
+
+  Returns a new trie with prefix,value-pairs that were matched by given
+  `prefixes` and the old trie with those pairs removed.  If a prefix was not
+  found in given `trie` it is ignored.
+
+  By default an exact match is used, specify `match: :lpm` to use longest
+  prefix match instead.
+
+  ## Example
+
+      iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"3.3.3.0/30", 3}])
+      iex> {t2, t3} = split(t, ["2.2.2.0/24", "3.3.3.0/30"])
+      iex> count(t2)
+      2
+      iex> get(t2, "2.2.2.0/24")
+      {"2.2.2.0/24", 2}
+      iex> get(t2, "3.3.3.0/30")
+      {"3.3.3.0/30", 3}
+      iex> count(t3)
+      1
+      iex> get(t3, "1.1.1.0/24")
+      {"1.1.1.0/24", 1}
+
+      # use longest prefix match
+      iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"3.3.3.0/30", 3}])
+      iex> {t4, t5} = split(t, ["2.2.2.2", "3.3.3.3"], match: :lpm)
+      iex> count(t4)
+      2
+      iex> get(t4, "2.2.2.0/24")
+      {"2.2.2.0/24", 2}
+      iex> get(t4, "3.3.3.0/30")
+      {"3.3.3.0/30", 3}
+      iex> count(t5)
+      1
+      iex> get(t5, "1.1.1.0/24")
+      {"1.1.1.0/24", 1}
+
+  """
+  @spec split(t, [prefix], keyword) :: {t, t}
+  def split(trie, prefixes, opts \\ [])
+
+  def split(%__MODULE__{} = trie, prefixes, opts) when is_list(prefixes) do
+    t = take(trie, prefixes, opts)
+    {t, drop(trie, keys(t))}
+  rescue
+    err -> raise err
+  end
+
+  def split(%__MODULE__{} = _trie, prefixes, _opts),
+    do: raise(arg_err(:bad_pfxs, prefixes))
+
+  def split(trie, _prefixes, _opts),
+    do: raise(arg_err(:bad_trie, trie))
+
+  @doc """
+  Return a new Iptrie containing only given `prefixes` that were found in `trie`.
+
+  If a given prefix does not exist, it is ignored.  Optionally specifiy `match:
+  :lpm` to use a longest prefix match instead of exact, which is the default.
+
+  ## Examples
+
+      iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"acdc::/16", 3}])
+      iex> t2 = take(t, ["1.1.1.0/24", "acdc::/16"])
+      iex> count(t2)
+      2
+      iex> get(t2, "1.1.1.0/24")
+      {"1.1.1.0/24", 1}
+      iex> get(t2, "acdc::/16")
+      {"acdc:0:0:0:0:0:0:0/16", 3}
+
+      # use longest match
+      iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"acdc::/16", 3}])
+      iex> t3 = take(t, ["1.1.1.1", "acdc:1975::1"], match: :lpm)
+      iex> count(t3)
+      2
+      iex> get(t3, "1.1.1.0/24")
+      {"1.1.1.0/24", 1}
+      iex> get(t3, "acdc::/16")
+      {"acdc:0:0:0:0:0:0:0/16", 3}
+
+      # ignore missing prefixes
+      iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"acdc::/16", 3}])
+      iex> t4 = take(t, ["1.1.1.1", "3.3.3.3"], match: :lpm)
+      iex> count(t4)
+      1
+      iex> get(t4, "1.1.1.0/24")
+      {"1.1.1.0/24", 1}
+
+  """
+  @spec take(t, [prefix], keyword) :: t
+  def take(trie, prefixes, opts \\ [])
+
+  def take(%__MODULE__{} = trie, prefixes, opts) when is_list(prefixes) do
+    fun = fn pfx, t ->
+      case match(opts).(trie, pfx) do
+        nil -> t
+        {pfx, val} -> put(t, pfx, val)
+      end
+    end
+
+    Enum.reduce(prefixes, new(), fun)
+  rescue
+    err -> raise err
+  end
+
+  def take(%__MODULE__{} = _trie, prefixes, _opts),
+    do: raise(arg_err(:bad_pfxs, prefixes))
+
+  def take(trie, _prefixes, _opts),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
@@ -849,8 +1271,8 @@ defmodule Iptrie do
 
   ## Example
 
-      iex> new([{"1.1.1.1", 1}, {"2001:db8::", 2}])
-      ...> |> types()
+      iex> t = new([{"1.1.1.1", 1}, {"2001:db8::", 2}])
+      iex> types(t)
       [32, 128]
 
   """
@@ -956,7 +1378,7 @@ defmodule Iptrie do
 
   Uses longest prefix match, so search `prefix` is usually matched by some less
   specific prefix.  If matched, `fun` is called on the entry's value.  If
-  `prefix` had no longest prefix match, the default is inserted and `fun` is
+  `prefix` had no longest prefix match, the `default` is inserted and `fun` is
   not called.
 
   ## Examples
@@ -970,7 +1392,6 @@ defmodule Iptrie do
       {"1.1.1.0/24", 2}
       iex>
       iex> # probably not what you wanted:
-      iex>
       iex> lookup(ipt, "2.2.2.2")
       {"2.2.2.2", 0}
 

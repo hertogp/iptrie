@@ -167,8 +167,33 @@ defmodule IptrieTest do
   end
 
   # Iptrie.find/2 - simply wraps Iptrie.fetch/3
+  test "find/2 findes exactly or on longest prefix match" do
+    t = @test_trie
+    assert {:ok, {"1.1.1.0/24", 1}} == find(t, "1.1.1.0/24")
+    assert {:ok, {"1.1.1.0/25", 2}} == find(t, "1.1.1.1")
+    assert {:error, :notfound} == find(t, "2.2.2.2")
+  end
+
+  test "find/2 does not raise on invalid input" do
+    t = new()
+    for pfx <- @bad_pfx, do: assert({:error, :einval} == find(t, pfx))
+    for tree <- @bad_trees, do: assert({:error, :bad_trie} == find(tree, "1.1.1.1"))
+  end
 
   # Iptrie.find!/2 - simply wraps Iptrie.fetch!/3
+  test "find!/2 wraps fetch/3 and raises" do
+    t = new()
+    for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> find!(t, pfx) end)
+    for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> find!(tree, "1.1.1.1") end)
+
+    t = @test_trie
+    assert {"1.1.1.0/24", 1} == find!(t, "1.1.1.0/24")
+    assert_raise KeyError, fn -> find!(t, "2.2.2.2") end
+
+    # longest prefix match
+    assert {"1.1.1.0/25", 2} == find!(t, "1.1.1.1")
+    assert_raise KeyError, fn -> find!(t, "2.2.2.2") end
+  end
 
   # Iptrie.filter/2
   test "filter/2 filters based on bits, maxlen and/or value" do
@@ -475,5 +500,301 @@ defmodule IptrieTest do
 
     assert_raise ArgumentError, fn -> has_type?(new(), 32.0) end
     assert_raise ArgumentError, fn -> has_type?(new(), -32) end
+  end
+
+  # Iptrie.count/1
+  test "count/1 returns total count of entries in Iptrie" do
+    assert count(@test_trie) == 9
+  end
+
+  test "count/1 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> count(tree) end)
+  end
+
+  # Iptrie.count/2
+  test "count/2 returns count for given type" do
+    assert count(@test_trie, 32) == 3
+    assert count(@test_trie, 48) == 2
+    assert count(@test_trie, 64) == 2
+    assert count(@test_trie, 128) == 2
+    # no type -> 0
+    assert count(@test_trie, 11) == 0
+  end
+
+  test "count/2 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> count(tree, 32) end)
+
+    assert_raise ArgumentError, fn -> count(@test_trie, 1.0) end
+    assert_raise ArgumentError, fn -> count(@test_trie, -32) end
+  end
+
+  # Iptrie.empty/1
+  test "empty/1 says if an Iptrie is empty or not" do
+    assert empty?(@test_trie) == false
+    assert empty?(new()) == true
+  end
+
+  test "empty/1 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> empty?(tree) end)
+  end
+
+  # Iptrie.empty/2
+  test "empty/2 says if a radix tree is empty or not" do
+    assert empty?(@test_trie, 32) == false
+    assert empty?(@test_trie, 48) == false
+    assert empty?(@test_trie, 64) == false
+    assert empty?(@test_trie, 128) == false
+    # no type -> is empty
+    assert empty?(@test_trie, 11) == true
+  end
+
+  test "empty/2 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> empty?(tree, 32) end)
+
+    assert_raise ArgumentError, fn -> empty?(@test_trie, 1.0) end
+    assert_raise ArgumentError, fn -> empty?(@test_trie, -32) end
+  end
+
+  # Iptrie.has_prefix?/1
+  test "has_prefix/1 says if an Iptrie has a prefix or not" do
+    assert has_prefix?(@test_trie, "1.1.1.0/24") == true
+    assert has_prefix?(@test_trie, "acdc:1976::/32") == true
+    assert has_prefix?(@test_trie, "1.1.1.0") == false
+  end
+
+  test "has_prefix/1 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> has_prefix?(tree, "1.1.1.1") end)
+
+    # bad prefix
+    t = new()
+
+    for pfx <- @bad_pfx,
+        do: assert_raise(ArgumentError, fn -> has_prefix?(t, pfx) end)
+  end
+
+  # Iptrie.pop/2
+  test "pop/2 removes pfx,v-pair and returns it with a new tree" do
+    t = @test_trie
+
+    {{pfx, val}, t2} = pop(t, "1.1.1.0/24")
+    assert {"1.1.1.0/24", 1} == {pfx, val}
+    assert get(t2, "1.1.1.0/24") == nil
+
+    # default value for prefix not found is nil
+    {{pfx, val}, t2} = pop(t, "1.1.1.1")
+    assert {"1.1.1.1", nil} == {pfx, val}
+    assert t2 == t
+
+    # specify default value in case of no match
+    {{pfx, val}, t2} = pop(t, "1.1.1.1", default: :notfound)
+    assert {"1.1.1.1", :notfound} == {pfx, val}
+    assert t2 == t
+
+    # use lpm to pop lpm match
+    {{pfx, val}, t2} = pop(t, "1.1.1.1", match: :lpm)
+    assert {"1.1.1.0/25", 2} == {pfx, val}
+    assert get(t2, "1.1.1.0/25") == nil
+  end
+
+  test "pop/2 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> pop(tree, "1.1.1.1") end)
+
+    t = new()
+
+    for pfx <- @bad_pfx,
+        do: assert_raise(ArgumentError, fn -> pop(t, pfx) end)
+  end
+
+  # Iptrie.drop/2
+  test "drop/2 removes pfx,value-pairs and returns a new tree" do
+    t = @test_trie
+
+    t2 = drop(t, ["1.1.1.0/24", "1.1.1.128/25", "11-22-33-44-55-67-00-00/48"])
+    assert get(t2, "1.1.1.0/24") == nil
+    assert get(t2, "1.1.1.128/25") == nil
+    assert get(t2, "11-22-33-44-55-67-00-00/48") == nil
+
+    # ignores non-existing prefixesdefault value for prefix not found is nil
+    assert t == drop(t, ["2.2.2.2"])
+
+    # doesn't choke on empty list
+    assert t == drop(t, [])
+  end
+
+  test "drop/2 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> drop(tree, ["1.1.1.1"]) end)
+
+    t = new()
+
+    for pfx <- @bad_pfx,
+        do: assert_raise(ArgumentError, fn -> drop(t, [pfx]) end)
+
+    # also complaines when arg is not a list
+    assert_raise ArgumentError, fn -> drop(t, "1.1.1.1") end
+  end
+
+  # Iptrie.take/3
+  test "take/3 returns a new trie with only given prefixes" do
+    t = @test_trie
+
+    t2 = take(t, ["1.1.1.0/24", "1.1.1.128/25", "11-22-33-44-55-67-00-00/48"])
+    assert get(t2, "1.1.1.0/24") == {"1.1.1.0/24", 1}
+    assert get(t2, "1.1.1.128/25") == {"1.1.1.128/25", 3}
+    assert get(t2, "11-22-33-44-55-67-00-00/48") == {"11-22-33-44-55-67-00-00/48", 9}
+
+    # ignores non-existing prefixesdefault value for prefix not found is nil
+    assert take(t, ["2.2.2.2"]) |> empty?()
+
+    # doesn't choke on empty list
+    assert take(t, []) |> empty?()
+
+    # can use lpm match
+    t2 = take(t, ["1.1.1.1", "1.1.1.129", "11-22-33-44-55-67-88-99"], match: :lpm)
+    assert get(t2, "1.1.1.0/25") == {"1.1.1.0/25", 2}
+    assert get(t2, "1.1.1.128/25") == {"1.1.1.128/25", 3}
+    assert get(t2, "11-22-33-44-55-67-00-00/48") == {"11-22-33-44-55-67-00-00/48", 9}
+  end
+
+  test "take/3 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> take(tree, ["1.1.1.1"]) end)
+
+    t = new()
+
+    for pfx <- @bad_pfx,
+        do: assert_raise(ArgumentError, fn -> take(t, [pfx]) end)
+
+    # also complaines when arg is not a list
+    assert_raise ArgumentError, fn -> take(t, "1.1.1.1") end
+  end
+
+  # Iptrie.split/3
+  test "split/3 splits a trie using a list of prefixes" do
+    t = @test_trie
+
+    {t2, t3} = split(t, ["1.1.1.0/24", "1.1.1.128/25", "11-22-33-44-55-67-00-00/48"])
+    assert count(t2) == 3
+    assert count(t3) == 6
+    assert get(t2, "1.1.1.0/24") == {"1.1.1.0/24", 1}
+    assert get(t2, "1.1.1.128/25") == {"1.1.1.128/25", 3}
+    assert get(t2, "11-22-33-44-55-67-00-00/48") == {"11-22-33-44-55-67-00-00/48", 9}
+
+    # ignores non-existing prefixesdefault value for prefix not found is nil
+    {t2, t3} = split(t, ["2.2.2.2"])
+    assert empty?(t2)
+    assert count(t3) == 9
+
+    # doesn't choke on empty list
+    {t2, t3} = split(t, [])
+    assert empty?(t2)
+    assert count(t3) == 9
+
+    # can use lpm
+    {t2, t3} = split(t, ["1.1.1.1", "1.1.1.161", "11-22-33-44-55-67-11-22"], match: :lpm)
+    assert count(t2) == 3
+    assert count(t3) == 6
+    assert get(t2, "1.1.1.0/25") == {"1.1.1.0/25", 2}
+    assert get(t2, "1.1.1.128/25") == {"1.1.1.128/25", 3}
+    assert get(t2, "11-22-33-44-55-67-00-00/48") == {"11-22-33-44-55-67-00-00/48", 9}
+  end
+
+  test "split/3 raises on invalid input" do
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> split(tree, ["1.1.1.1"]) end)
+
+    t = new()
+
+    for pfx <- @bad_pfx,
+        do: assert_raise(ArgumentError, fn -> split(t, [pfx]) end)
+
+    # also complaines when arg is not a list
+    assert_raise ArgumentError, fn -> split(t, "1.1.1.1") end
+  end
+
+  # Iptrie.merge/2
+  test "merge/2 merges two tries into one" do
+    other_trie =
+      new([
+        {"1.1.1.0/24", 0},
+        {"2.2.2.0/24", 10},
+        {"acdc:1977::/32", 11},
+        {"11-22-33-55-00-00/32", 12},
+        {"11-22-33-44-55-68-00-00/54", 13}
+      ])
+
+    t = merge(@test_trie, other_trie)
+    assert count(t) == 13
+    assert count(t, 32) == 4
+    assert count(t, 48) == 3
+    assert count(t, 64) == 3
+    assert count(t, 128) == 3
+
+    # merge overwrites entries in first trie
+    assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", 0}
+
+    # check t got the other_trie's prefix,value entries
+    assert get(t, "2.2.2.0/24") == {"2.2.2.0/24", 10}
+    assert get(t, "acdc:1977::/32") == {"acdc:1977:0:0:0:0:0:0/32", 11}
+  end
+
+  test "merge/2 raises on invalid input" do
+    good = new()
+
+    for bad <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> merge(bad, good) end)
+
+    for bad <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> merge(good, bad) end)
+  end
+
+  test "merge/3 merges two tries into one with conflict resolution" do
+    keep1 = fn _k, v1, _v2 -> v1 end
+
+    other_trie =
+      new([
+        {"1.1.1.0/24", 0},
+        {"2.2.2.0/24", 10},
+        {"acdc:1977::/32", 11},
+        {"11-22-33-55-00-00/32", 12},
+        {"11-22-33-44-55-68-00-00/54", 13}
+      ])
+
+    t = merge(@test_trie, other_trie, keep1)
+    assert count(t) == 13
+    assert count(t, 32) == 4
+    assert count(t, 48) == 3
+    assert count(t, 64) == 3
+    assert count(t, 128) == 3
+
+    # conflicts preserve value in the first trie (@test_trie)
+    assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", 1}
+
+    # check t got the other_trie's prefix,value entries
+    assert get(t, "2.2.2.0/24") == {"2.2.2.0/24", 10}
+    assert get(t, "acdc:1977::/32") == {"acdc:1977:0:0:0:0:0:0/32", 11}
+
+    # an empty trie is not a problem
+    assert @test_trie == merge(new(), @test_trie, keep1)
+    assert @test_trie == merge(@test_trie, new(), keep1)
+  end
+
+  test "merge/3 raises on invalid input" do
+    good = new()
+    keep1 = fn _k, v1, _v2 -> v1 end
+
+    for bad <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> merge(bad, good, keep1) end)
+
+    for bad <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> merge(good, bad, keep1) end)
+
+    assert_raise ArgumentError, fn -> merge(good, good, fn x -> x end) end
   end
 end
