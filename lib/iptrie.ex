@@ -390,12 +390,12 @@ defmodule Iptrie do
   end
 
   @doc ~S"""
-  Returns a new Iptrie, keeping only the entries for which `fun` returns _truthy_.
+  Returns a new Iptrie, keeping only the entries for which `fun` returns
+  _truthy_.
 
-  The signature for `fun` is (prefix, value -> boolean), where the value is stored
-  under prefix in the trie.
-
-  Radix trees that are empty, are removed from the new Iptrie.
+  The signature for `fun` is (prefix, value -> boolean), where the value is
+  stored under prefix in the trie.  Radix trees that are empty, are removed
+  from the new Iptrie.
 
   ## Example
 
@@ -448,7 +448,7 @@ defmodule Iptrie do
   If `prefix` is not found, `default` is returned. If `default` is not
   provided, nil is used.
 
-  ## Examples
+  ## Example
 
       iex> ipt = new([{"1.1.1.0/30", "A"}, {"1.1.1.0/31", "B"}, {"1.1.1.0", "C"}])
       iex>
@@ -482,22 +482,27 @@ defmodule Iptrie do
   @doc """
   Returns true if given `prefix` is present in `trie`, false otherwise.
 
-  The check is done based on an exact match.
+  The check is done based on an exact match, unless the option `match: :lpm`
+  is provided to match based on longest prefix match.
 
   ## Example
 
       iex> t = new([{"1.1.1.1", 1}, {"1.1.1.0/24", 2}, {"acdc::/16", 3}])
       iex> has_prefix?(t, "1.1.1.2")
       false
+      iex> has_prefix?(t, "1.1.1.2", match: :lpm)
+      true
       iex> has_prefix?(t, "1.1.1.1")
       true
       iex> has_prefix?(t, "acdc::/16")
       true
 
   """
-  @spec has_prefix?(t, prefix) :: boolean
-  def has_prefix?(%__MODULE__{} = trie, prefix) do
-    case get(trie, prefix) do
+  @spec has_prefix?(t, prefix, keyword) :: boolean
+  def has_prefix?(trie, prefix, opts \\ [])
+
+  def has_prefix?(%__MODULE__{} = trie, prefix, opts) do
+    case match(opts).(trie, prefix) do
       nil -> false
       _ -> true
     end
@@ -505,14 +510,15 @@ defmodule Iptrie do
     err -> raise err
   end
 
-  def has_prefix?(trie, _prefix),
+  def has_prefix?(trie, _prefix, _opts),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Returns true if `trie` has given `type`, false otherwise.
 
-  An Iptrie groups prefixes into radix trees by their maxlen property, also known
-  as the type of prefix.
+  An Iptrie groups prefixes into radix trees by their maxlen property, also
+  known as the type of prefix.  Use `Iptrie.types/1` to get a list of all
+  available types.
 
   ## Example
 
@@ -627,8 +633,6 @@ defmodule Iptrie do
   `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
   present, the search key will be included in the result.
 
-  If `prefix` is not present an empty list is returned.
-
   ## Example
 
       iex> ipt = new()
@@ -671,7 +675,6 @@ defmodule Iptrie do
   Return the prefix,value-pair, whose prefix is the longest match for given search `prefix`.
 
   Returns nil if there is no match for search `prefix`.
-  Silently ignores any errors when encoding the given search `prefix` by returning nil.
 
   ## Examples
 
@@ -838,7 +841,7 @@ defmodule Iptrie do
   @doc """
   Create an new, empty Iptrie.
 
-  ## Examples
+  ## Example
 
       iex> Iptrie.new()
       %Iptrie{}
@@ -850,7 +853,7 @@ defmodule Iptrie do
     do: %__MODULE__{}
 
   @doc """
-  Create a new Iptrie, populated via a list of prefix,value--pairs.
+  Create a new Iptrie, populated via a list of prefix,value-pairs.
 
   ## Example
 
@@ -860,9 +863,9 @@ defmodule Iptrie do
       ...>  {"acdc:1975::/32", "TNT"}
       ...> ]
       iex> ipt = Iptrie.new(elements)
-      iex> Map.get(ipt, 32)
+      iex> radix(ipt, 32)
       {0, {22, [{<<1, 1, 1>>, "net1"}], [{<<1, 1, 2>>, "net2"}]}, nil}
-      iex> Map.get(ipt, 128)
+      iex> radix(ipt, 128)
       {0, nil, [{<<172, 220, 25, 117>>, "TNT"}]}
 
   """
@@ -918,10 +921,9 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Populate the `trie` with a list of {prefix,value}-pairs.
+  Populate the `trie` with a list of prefix,value-pairs.
 
-  This always uses an exact match for *prefix*, updating its *value* if it
-  exists.  Any errors are silently ignored as the trie is always returned.
+  This always uses an exact match for prefix, updating its value if it exists.
 
   ## Example
 
@@ -971,7 +973,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Return the `Radix` tree for given `type` in an Iptrie, or a new empty tree.
+  Return the `Radix` tree for given `type` in an Iptrie, or a new empty radix tree.
 
   ## Example
 
@@ -1010,7 +1012,7 @@ defmodule Iptrie do
   and should return an updated accumulator.  The result is the last `acc`
   accumulator returned.
 
-  ## Examples
+  ## Example
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -1043,14 +1045,14 @@ defmodule Iptrie do
   @doc """
   Invoke `fun` on each prefix,value-pair in the radix tree for given `type`.
 
-  The function `fun` is called with the radix key, value and `acc` accumulator
-  and should return an updated accumulator.  The result is the last `acc`
-  accumulator returned.
+  The function `fun` is called with the prefix (a `t:Pfx.t/0` struct), value and
+  `acc` accumulator and should return an updated accumulator.  The result is
+  the last `acc` accumulator returned.
 
   If `type` is a list of `type`'s, the `acc` accumulator is updated across all
-  radix trees of `type`'s.  Probably not entirely usefull, but there you go.
+  radix trees of type `type`.  Probably not entirely usefull, but there you go.
 
-  ## Examples
+  ## Example
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 1)
@@ -1058,14 +1060,14 @@ defmodule Iptrie do
       ...> |> put("acdc:1975::/32", 3)
       ...> |> put("acdc:2021::/32", 4)
       iex>
-      iex> reduce(ipt, 32, 0, fn _key, value, acc -> acc + value end)
+      iex> reduce(ipt, 32, 0, fn _pfx, value, acc -> acc + value end)
       3
-      iex> reduce(ipt, 48, 0, fn _key, value, acc -> acc + value end)
+      iex> reduce(ipt, 48, 0, fn _pfx, value, acc -> acc + value end)
       0
-      iex> reduce(ipt, 128, 0, fn _key, value, acc -> acc + value end)
+      iex> reduce(ipt, 128, 0, fn _pfx, value, acc -> acc + value end)
       7
       iex>
-      iex> reduce(ipt, [32, 48, 128], 0, fn _key, value, acc -> acc + value end)
+      iex> reduce(ipt, [32, 48, 128], 0, fn _pfx, value, acc -> acc + value end)
       10
 
   """
@@ -1101,7 +1103,7 @@ defmodule Iptrie do
   By default an exact match is used, specify `match: :lpm` to use longest
   prefix match instead.
 
-  ## Example
+  ## Examples
 
       iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"3.3.3.0/30", 3}])
       iex> {t2, t3} = split(t, ["2.2.2.0/24", "3.3.3.0/30"])
@@ -1344,8 +1346,8 @@ defmodule Iptrie do
 
   Uses longest prefix match, so search `prefix` is usually matched by some less
   specific prefix.  If matched, `fun` is called on the entry's value.  If
-  `prefix` had no longest prefix match, the `default` is inserted and `fun` is
-  not called.
+  `prefix` had no longest prefix match, the `default` is inserted under
+  `prefix` and `fun` is not called.
 
   ## Examples
 

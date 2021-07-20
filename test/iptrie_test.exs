@@ -564,14 +564,15 @@ defmodule IptrieTest do
     assert_raise ArgumentError, fn -> empty?(@test_trie, -32) end
   end
 
-  # Iptrie.has_prefix?/1
-  test "has_prefix/1 says if an Iptrie has a prefix or not" do
+  # Iptrie.has_prefix?/3
+  test "has_prefix/3 says if an Iptrie has a prefix or not" do
     assert has_prefix?(@test_trie, "1.1.1.0/24") == true
     assert has_prefix?(@test_trie, "acdc:1976::/32") == true
     assert has_prefix?(@test_trie, "1.1.1.0") == false
+    assert has_prefix?(@test_trie, "1.1.1.0", match: :lpm) == true
   end
 
-  test "has_prefix/1 raises on invalid input" do
+  test "has_prefix/3 raises on invalid input" do
     for tree <- @bad_trees,
         do: assert_raise(ArgumentError, fn -> has_prefix?(tree, "1.1.1.1") end)
 
