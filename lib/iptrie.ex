@@ -559,12 +559,6 @@ defmodule Iptrie do
         %Pfx{bits: <<0xacdc::16, 0x1975::16>>, maxlen: 128},
         %Pfx{bits: <<0xacdc::16, 0x2021::16>>, maxlen: 128}
       ]
-      iex>
-      iex> radix(ipt, 32) |> Radix.keys()
-      [
-        <<1, 1, 1>>,
-        <<2, 2, 2>>
-      ]
 
   """
   @spec keys(t) :: list(prefix)
@@ -580,7 +574,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Returns the  prefixes stored in the radix tree in `trie` for given `type`.
+  Returns the prefixes stored in the radix tree in `trie` for given `type`.
 
   Note that the Iptrie keys are returned as `t:Pfx.t/0` structs.
 
