@@ -1,7 +1,6 @@
 defmodule IptrieTest do
   use ExUnit.Case
   doctest Iptrie, import: true
-  # alias Radix
   import Iptrie
 
   @bad_pfx [
