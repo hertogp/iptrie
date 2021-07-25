@@ -62,7 +62,7 @@ defmodule Iptrie.MixProject do
   defp deps do
     [
       {:radix, "~> 0.3"},
-      {:pfx, "~> 0.5"},
+      {:pfx, "~> 0.6"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: :dev, runtime: false},
       {:credo, "~> 0.8", only: [:dev, :test]},
