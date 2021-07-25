@@ -912,7 +912,16 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc ~S"""
-  Prunes given `trie` by calling `fun` on neighboring prefixes.
+  Prunes given `trie` by calling `fun` on neighboring prefixes, possibly
+  replacing them with their parent.
+
+  The callback `fun` is invoked with either a 5- or a 6-tuple:
+  - `{p0, p1, v1, p2, v2}` for neighboring `p1`, `p2`, their parent `p0` is not in `trie`
+  - `{p0, v0, p1, v1, p2, v2}` for the parent, its value and that of its two neighboring children.
+
+  The callback decides what happens by returning either:
+  - `{:ok, value}`, value will be stored under `p0` and the neighboring prefixes `p1, p2` are deleted
+  - nil (or anything else really), in which case the tree is not changed.
 
   ## Examples
 

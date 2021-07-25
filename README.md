@@ -99,6 +99,58 @@ Since prefixes are stored in specific radix trees based on the `maxlen` of
 given prefix, you could also mix IPv4, IPv6, EUI-48, EUI-64 prefixes and
 possibly others, in a single Iptrie.
 
+## Examples
+
+Summarize an Iptrie containing a list of full length prefixes within a /24,
+with 1 missing address:
+
+    iex> new(for x <- 0..255, do: {"1.1.1.#{x}", x})
+    ...> |> delete("1.1.1.128")
+    ...> |> prune(fn _ -> {:ok, 0} end, recurse: true)
+    ...> |> to_list()
+    ...> |> Enum.map(fn {pfx, _v} -> {"#{pfx}", "Range #{Pfx.first(pfx)} - #{Pfx.last(pfx)}"} end)
+    [
+      {"1.1.1.0/25",   "Range 1.1.1.0 - 1.1.1.127"},
+      {"1.1.1.129",    "Range 1.1.1.129 - 1.1.1.129"},
+      {"1.1.1.130/31", "Range 1.1.1.130 - 1.1.1.131"},
+      {"1.1.1.132/30", "Range 1.1.1.132 - 1.1.1.135"},
+      {"1.1.1.136/29", "Range 1.1.1.136 - 1.1.1.143"},
+      {"1.1.1.144/28", "Range 1.1.1.144 - 1.1.1.159"},
+      {"1.1.1.160/27", "Range 1.1.1.160 - 1.1.1.191"},
+      {"1.1.1.192/26", "Range 1.1.1.192 - 1.1.1.255"}
+    ]
+
+Find the more specific entries in an Iptrie for a given search prefix
+
+    iex> new()
+    ...> |> put("acdc:1975::/32", "TNT")
+    ...> |> put("acdc:1977::/32", "LTBR")
+    ...> |> put("abba:1975::/32", "RING")
+    ...> |> more("acdc::/16")
+    ...> |> Enum.map(fn {p, v} -> {"#{p}", v} end)
+    [
+       {"acdc:1977:0:0:0:0:0:0/32", "LTBR"},
+       {"acdc:1975:0:0:0:0:0:0/32", "TNT"}
+    ]
+
+Find the less specific entries in an Iptrie for a given search prefix
+
+    iex> new()
+    ...> |> put("1.1.1.0/24", 0)
+    ...> |> put("1.1.1.0/25", 1)
+    ...> |> put("1.1.1.0/26", 2)
+    ...> |> put("1.1.1.0/30", 3)
+    ...> |> put("1.1.1.128/25", 4)
+    ...> |> less("1.1.1.3")
+    ...> |> Enum.map(fn {pfx, v} -> {"#{pfx}", v} end)
+    [
+      {"1.1.1.0/30", 3},
+      {"1.1.1.0/26", 2},
+      {"1.1.1.0/25", 1},
+      {"1.1.1.0/24", 0}
+    ]
+
+
 <!-- @MODULEDOC -->
 
 ## Installation
