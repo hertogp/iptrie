@@ -1,7 +1,7 @@
 defmodule IptrieTest do
   use ExUnit.Case
   doctest Iptrie, import: true
-  alias Radix
+  # alias Radix
   import Iptrie
 
   @bad_pfx [
@@ -479,7 +479,6 @@ defmodule IptrieTest do
 
   # Iptrie.radix/2
   test "radix/2 returns an existing radix tree or an empty one" do
-    alias Radix
     t = @test_trie
     r = radix(t, 32)
     assert Radix.get(r, <<1, 1, 1>>) == {<<1, 1, 1>>, 1}
@@ -634,6 +633,62 @@ defmodule IptrieTest do
 
     for pfx <- @bad_pfx,
         do: assert_raise(ArgumentError, fn -> pop(t, pfx) end)
+  end
+
+  # Iptrie.prune/3
+  test "prune/3 validates input" do
+    goodfun = fn _ -> {:ok, 0} end
+    badfun = fn -> {:ok, 0} end
+
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> prune(tree, goodfun) end)
+
+    assert_raise ArgumentError, fn -> prune(@test_trie, badfun) end
+  end
+
+  test "prune/3 combines neighboring prefixes" do
+    combine = fn _ -> {:ok, 0} end
+    elements = Pfx.partition("1.1.1.0/24", 32) |> Enum.with_index()
+    ipt = new(elements)
+    assert count(ipt) == 256
+    # one pass
+    ipt2 = prune(ipt, combine)
+    assert count(ipt2) == 128
+    assert has_prefix?(ipt2, "1.1.1.0/31")
+    ipt3 = prune(ipt, combine, recurse: true)
+    assert count(ipt3) == 1
+    assert has_prefix?(ipt3, "1.1.1.0/24")
+  end
+
+  test "prune/3 combines a full set of prefixes to empty prefix for given type" do
+    combine = fn
+      {_p0, _p1, v1, _p2, v2} -> {:ok, v1 + v2}
+      {_p0, v0, _p1, v1, _p2, v2} -> {:ok, v0 + v1 + v2}
+    end
+
+    ipt = new(for x <- 0..255, do: {Pfx.new(<<x>>, 8), x})
+    assert count(ipt) == 256
+    ipt2 = prune(ipt, combine, recurse: true)
+    assert count(ipt2) == 1
+    assert get(ipt2, Pfx.new(<<>>, 8)) == {%Pfx{bits: <<>>, maxlen: 8}, 32640}
+    assert Enum.sum(0..255) == 32640
+  end
+
+  test "prune/3 prunes across all radix trees" do
+    combine = fn
+      {_p0, _p1, v1, _p2, v2} -> {:ok, v1 + v2}
+      {_p0, v0, _p1, v1, _p2, v2} -> {:ok, v0 + v1 + v2}
+    end
+
+    ipt = new([{"1.1.1.0/31", 1}, {"1.1.1.2/31", 2}, {"acdc::0", 30}, {"acdc::1", 40}])
+    assert count(ipt) == 4
+    assert count(ipt, 32) == 2
+    assert count(ipt, 128) == 2
+
+    ipt2 = prune(ipt, combine, recurse: true)
+    assert count(ipt2) == 2
+    assert get(ipt2, "1.1.1.0/30") == {"1.1.1.0/30", 3}
+    assert get(ipt2, "acdc::0/127") == {"acdc:0:0:0:0:0:0:0/127", 70}
   end
 
   # Iptrie.drop/2

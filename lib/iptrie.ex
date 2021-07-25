@@ -911,6 +911,84 @@ defmodule Iptrie do
   def pop(trie, _prefix, _opts),
     do: raise(arg_err(:bad_trie, trie))
 
+  @doc ~S"""
+  Prunes given `trie` by calling `fun` on neighboring prefixes.
+
+  ## Examples
+
+      iex> adder = fn
+      ...>   {_p0, _p1, v1, _p2, v2} -> {:ok, v1 + v2}
+      ...>   {_p0, v0, _p1, v1, _p2, v2} -> {:ok, v0 + v1 + v2}
+      ...> end
+      iex> ipt = new()
+      ...> |> put("1.1.1.0/26", 0)
+      ...> |> put("1.1.1.64/26", 1)
+      ...> |> put("1.1.1.128/26", 2)
+      ...> |> put("1.1.1.192/26", 3)
+      iex> prune(ipt, adder)
+      ...> |> to_list()
+      ...> |> Enum.map(fn {p, v} -> {"#{p}", v} end)
+      [
+        {"1.1.1.0/25", 1},
+        {"1.1.1.128/25", 5}
+      ]
+      iex>
+      iex> prune(ipt, adder, recurse: true)
+      ...> |> to_list()
+      ...> |> Enum.map(fn {p, v} -> {"#{p}", v} end)
+      [{"1.1.1.0/24", 6}]
+
+      # summerize all /24's inside 10.10.0.0/16
+      # -> only 10.10.40.0/24 is missing
+      iex> slash24s = Pfx.partition("10.10.0.0/16", 24)
+      ...> |> Enum.with_index()
+      ...> |> new()
+      ...> |> delete("10.10.40.0/24")
+      iex>
+      iex> prune(slash24s, fn _ -> {:ok, 0} end, recurse: true)
+      ...> |> to_list()
+      ...> |> Enum.map(fn {p, v} -> {"#{p}", v} end)
+      [
+        {"10.10.0.0/19", 0},
+        {"10.10.32.0/21", 0},
+        {"10.10.41.0/24", 41},
+        {"10.10.42.0/23", 0},
+        {"10.10.44.0/22", 0},
+        {"10.10.48.0/20", 0},
+        {"10.10.64.0/18", 0},
+        {"10.10.128.0/17", 0}
+      ]
+
+  """
+  @spec prune(t, (tuple -> nil | {:ok, any}), Keyword.t()) :: t
+  def prune(trie, fun, opts \\ [])
+
+  def prune(%__MODULE__{} = trie, fun, opts) when is_function(fun, 1) do
+    types(trie)
+    |> Enum.map(fn type -> {type, radix(trie, type)} end)
+    |> Enum.map(fn {type, rdx} -> {type, prunep(rdx, type, fun, opts)} end)
+    |> Enum.filter(fn {_type, rdx} -> not Radix.empty?(rdx) end)
+    |> Enum.reduce(Iptrie.new(), fn {type, rdx}, ipt -> Map.put(ipt, type, rdx) end)
+  end
+
+  def prune(%__MODULE__{} = _trie, fun, _opts),
+    do: raise(arg_err(:bad_fun, {fun, 1}))
+
+  def prune(trie, _fun, _opts),
+    do: raise(arg_err(:bad_trie, trie))
+
+  defp prunep(rdx, type, fun, opts) do
+    callback = fn
+      {k0, k1, v1, k2, v2} ->
+        fun.({Pfx.new(k0, type), Pfx.new(k1, type), v1, Pfx.new(k2, type), v2})
+
+      {k0, v0, k1, v1, k2, v2} ->
+        fun.({Pfx.new(k0, type), v0, Pfx.new(k1, type), v1, Pfx.new(k2, type), v2})
+    end
+
+    Radix.prune(rdx, callback, opts)
+  end
+
   @doc """
   Puts the prefix,value-pairs in `elements` into `trie`.
 

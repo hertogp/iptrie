@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 - Nothing yet
 
+### changed
+- Pulled in `Radix` 0.3.0
+
+### added
+- `Iptrie.prune/3` to prune an Iptrie, optionally doing so recursively
+
 ## v0.4.0 - 2021-07-20
 
 ## changed
