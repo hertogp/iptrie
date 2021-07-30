@@ -13,6 +13,9 @@ defmodule IptrieTest do
   ]
   @bad_trees [42, %{}, {0, nil}, {1, nil, nil}, {nil, nil, nil}, [], nil]
 
+  @bad_keyvals1 [{"1.1.1.1", 1}, {"2.2.2.2"}]
+  @bad_keyvals2 [{"1.1.1.1", 1}, {"2.2.2.256", 2}]
+
   # change this and you'll need to change a lot of assertions
   @test_trie new()
              |> put("1.1.1.0/24", 1)
@@ -293,8 +296,9 @@ defmodule IptrieTest do
            ]
   end
 
-  test "keys/2 raises on invalid Iptries" do
+  test "keys/2 validates input" do
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> keys(tree, 32) end)
+    assert_raise ArgumentError, fn -> keys(@test_trie, {}) end
   end
 
   # Iptrie.less/2
@@ -441,6 +445,7 @@ defmodule IptrieTest do
     assert %Iptrie{} == new()
   end
 
+  # Iptrie.new/1
   test "new/1 returns a populated Iptrie" do
     # ipv4/6 recognized in different representations
     # eui-48/64 only in binary form
@@ -469,6 +474,8 @@ defmodule IptrieTest do
 
   test "new/1 raises on invalid arguments" do
     for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> new([{pfx, 0}]) end)
+    # validates prefix,value-pairs to be a pair
+    assert_raise ArgumentError, fn -> new([{"1.1.1.1", 0}, {"2.2.2.2"}]) end
   end
 
   # Iptrie.pop/2
@@ -530,6 +537,19 @@ defmodule IptrieTest do
     assert has_prefix?(ipt3, "1.1.1.0/24")
   end
 
+  test "prune/3 includes parent when combining" do
+    ipt = new([{"1.1.1.0/24", 1}, {"1.1.1.0/25", 2}, {"1.1.1.128/25", 3}])
+
+    add = fn
+      {_p0, _p1, v1, _p2, v2} -> {:ok, v1 + v2}
+      {_p0, v0, _p1, v1, _p2, v2} -> {:ok, v0 + v1 + v2}
+    end
+
+    ipt2 = prune(ipt, add)
+    assert count(ipt2) == 1
+    assert get(ipt2, "1.1.1.0/24") |> elem(1) == 6
+  end
+
   test "prune/3 combines a full set of prefixes to empty prefix for given type" do
     combine = fn
       {_p0, _p1, v1, _p2, v2} -> {:ok, v1 + v2}
@@ -581,6 +601,9 @@ defmodule IptrieTest do
     t = new()
     for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> put(t, [{pfx, 0}]) end)
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> put(tree, [{"1.1.1.1", 0}]) end)
+    assert_raise ArgumentError, fn -> put(new(), @bad_keyvals1) end
+    assert_raise ArgumentError, fn -> put(new(), @bad_keyvals2) end
+    assert_raise ArgumentError, fn -> put(new(), {{"1.1.1.1", 0}, {"2.2.2.2", 2}}) end
   end
 
   # Iptrie.put/3
@@ -633,7 +656,7 @@ defmodule IptrieTest do
     assert reduce(new(), 0, add) == 0
   end
 
-  test "reduce/3 raises on invalid input" do
+  test "reduce/3 validates invalid" do
     add = fn _k, v, acc -> acc + v end
 
     for tree <- @bad_trees,
@@ -644,7 +667,7 @@ defmodule IptrieTest do
   end
 
   # Iptrie.reduce/4
-  test "reduce/4 runs across one radix trees" do
+  test "reduce/4 runs across one radix tree" do
     t = @test_trie
     add = fn _k, v, acc -> acc + v end
     assert reduce(t, 32, 0, add) == 6
@@ -656,7 +679,7 @@ defmodule IptrieTest do
     assert reduce(t, 3, 0, add) == 0
   end
 
-  test "reduce/4 raises on invalid input" do
+  test "reduce/4 validates input" do
     add = fn _k, v, acc -> acc + v end
 
     # bad_trie
@@ -665,6 +688,9 @@ defmodule IptrieTest do
 
     # bad fun
     assert_raise ArgumentError, fn -> reduce(new(), 32, 0, fn x -> x end) end
+
+    # bad type
+    assert_raise ArgumentError, fn -> reduce(new(), -1, 0, add) end
   end
 
   # Iptrie.split/3

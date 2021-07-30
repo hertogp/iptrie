@@ -47,7 +47,6 @@ defmodule Iptrie do
   @spec match(keyword) :: function
   defp match(opts) do
     case Keyword.get(opts, :match) do
-      :longest -> &lookup/2
       :lpm -> &lookup/2
       _ -> &get/2
     end
@@ -348,11 +347,9 @@ defmodule Iptrie do
 
   """
   @spec find(t, prefix) :: {:ok, {prefix, any}} | {:error, atom}
-  def find(trie, prefix) do
-    fetch(trie, prefix, match: :lpm)
-  rescue
-    err -> raise err
-  end
+  def find(trie, prefix),
+    # fetch returns error/ok tuple, never raises..
+    do: fetch(trie, prefix, match: :lpm)
 
   @doc """
   Finds a prefix,value-pair for given `prefix` from `trie` using a longest
@@ -1012,8 +1009,11 @@ defmodule Iptrie do
 
   """
   @spec put(t, list({prefix(), any})) :: t
-  def put(%__MODULE__{} = trie, elements) when is_list(elements),
-    do: Enum.reduce(elements, trie, fn {k, v}, t -> put(t, k, v) end)
+  def put(%__MODULE__{} = trie, elements) when is_list(elements) do
+    Enum.reduce(elements, trie, fn {k, v}, t -> put(t, k, v) end)
+  rescue
+    FunctionClauseError -> raise arg_err(:bad_keyvals, elements)
+  end
 
   def put(%__MODULE__{} = _trie, elements),
     do: raise(arg_err(:bad_keyvals, elements))
