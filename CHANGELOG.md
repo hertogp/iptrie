@@ -6,7 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-- Nothing yet
+
+### fixed
+
+- Readme examples write their files to assets/, not img/
+
 
 ## v0.5.0 - 2021-07-25
 
@@ -15,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### added
 - `Iptrie.prune/3` to prune an Iptrie, optionally doing so recursively
+
 
 ## v0.4.0 - 2021-07-20
 
@@ -57,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Iptrie.fetch/2`, `Iptrie.fetch!/2`
 - `Iptrie.find/2`, `Iptrie.find!/2`
 - `Iptrie.filter/2`
+
 
 ## v0.2.0 - 2021-07-05
 

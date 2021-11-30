@@ -56,11 +56,11 @@ arguments given, if possible.
     iex> kv32 = fn {k, v} -> "#{Pfx.new(k, 32)}<br/>#{v}" end
     iex> radix(ipt, 32)
     ...> |> Radix.dot(label: "IPv4", kv_tostr: kv32)
-    ...> |> (&File.write("img/ipv4.dot", &1)).()
+    ...> |> (&File.write("assets/ipv4.dot", &1)).()
     iex> kv128 = fn {k, v} -> "#{Pfx.new(k, 128)}<br/>#{v}" end
     iex> radix(ipt, 128)
     ...> |> Radix.dot(label: "IPv6", kv_tostr: kv128)
-    ...> |> (&File.write("img/ipv6.dot", &1)).()
+    ...> |> (&File.write("assets/ipv6.dot", &1)).()
 
 
 The radix trees in the example above look like this:
@@ -87,7 +87,7 @@ prefixes, like e.g. MAC addresses:
     iex> kv48 = fn {k, v} -> "#{Pfx.new(k, 48)}<br/>#{v}" end
     iex> radix(ipt, 48)
     ...> |> Radix.dot(label: "MAC OUI", kv_tostr: kv48)
-    ...> |> (&File.write("img/mac.dot", &1)).()
+    ...> |> (&File.write("assets/mac.dot", &1)).()
 
 ![mac](assets/mac.dot.png)
 
