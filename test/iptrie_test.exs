@@ -231,6 +231,58 @@ defmodule IptrieTest do
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> get(tree, "1.1.1.1") end)
   end
 
+  # Iptrie.get_and_update/3
+  test "get_and_update/3 updates the trie (ie correct radix tree)" do
+    t = @test_trie
+
+    f = fn
+      {_bits, v} -> {v, v + 1}
+      nil -> {0, 1}
+    end
+
+    {org, t} = get_and_update(t, "1.1.1.0/24", f)
+    assert org == 1
+    assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", 2}
+
+    {org, t} = get_and_update(t, {{1, 1, 1, 0}, 24}, f)
+    assert org == 2
+    assert get(t, {{1, 1, 1, 0}, 24}) == {{{1, 1, 1, 0}, 24}, 3}
+
+    {org, t} = get_and_update(t, "acdc:1975::/32", f)
+    assert org == 4
+    assert get(t, "acdc:1975::/32") == {"acdc:1975:0:0:0:0:0:0/32", 5}
+
+    {org, t} = get_and_update(t, "11-22-33-44-55-66/24", f)
+    assert org == 6
+    assert get(t, "11-22-33-44-55-66/24") == {"11-22-33-00-00-00/24", 7}
+  end
+
+  test "get_and_update/3 raises on invalid input" do
+    t = new()
+
+    f = fn
+      {_bits, v} -> {v, v}
+      nil -> {0, 0}
+    end
+
+    for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> get_and_update(t, pfx, f) end)
+
+    for tree <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> get_and_update(tree, "1.1.1.1", f) end)
+
+    # bad callback function
+    bad_fun = fn a, b -> {a + b, a - b} end
+    assert_raise ArgumentError, fn -> get_and_update(new(), "1.1.1.1", bad_fun) end
+
+    # bad return value from callback
+    bad_fun2 = fn
+      {_bits, _val} -> [0, 1]
+      nil -> {0, 1, 2}
+    end
+
+    assert_raise ArgumentError, fn -> get_and_update(new(), "1.1.1.1", bad_fun2) end
+  end
+
   # Iptrie.has_prefix?/3
   test "has_prefix/3 says if an Iptrie has a prefix or not" do
     assert has_prefix?(@test_trie, "1.1.1.0/24") == true

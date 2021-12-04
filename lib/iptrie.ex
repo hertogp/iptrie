@@ -71,6 +71,9 @@ defmodule Iptrie do
   defp arg_err(:bad_type, arg),
     do: ArgumentError.exception("expected a maxlen (non_neg_integer) value, got #{inspect(arg)}")
 
+  defp arg_err(:bad_retval),
+    do: ArgumentError.exception("the callback yielded a bad return value")
+
   # API
 
   @doc """
@@ -475,6 +478,94 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
+  Updates a key,value-pair in `trie` by invoking `fun` with the result of an
+  exact match.
+
+  The callback `fun` is called with:
+  - `{bits, original_value}` if an exact match was found, or
+  - `nil`, in case the search `prefix` is not present in the `trie`
+
+  where `bits` are the actual bits of given `prefix` as retrieved from
+  the corresponding radix tree in given `trie`.
+
+  The callback function should return:
+  - `{current_value, new_value}`, or
+  - `:pop`.
+
+  When `{current_value, new_value}` is returned:
+  - the `new_value` is stored in the trie under given `prefix`, and
+  - `{current_value, trie}` is returned.
+
+  When the callback passes back `:pop`:
+  - the `{prefix, original_value}`-pair is deleted from the `trie`, and
+  - `{original_value, trie}` is returned.
+
+  If the callback passes back `:pop` when its argument was `nil` then `{nil, trie}`
+  is returned, where `trie` is unchanged.
+
+  If something similar is required, but based on a longest prefix match, perhaps
+  `Iptrie.update/3` or `Iptrie.update/4` is better suited.
+
+  ## Example
+
+      iex> counter = fn {_, v} -> {v, v + 1}
+      ...>   nil -> {0, 1}
+      ...> end
+      iex> ipt = new()
+      iex> {org, ipt} = get_and_update(ipt, "1.1.1.1", counter)
+      iex> org
+      0
+      iex> get(ipt, "1.1.1.1")
+      {"1.1.1.1", 1}
+      iex> {org, ipt} = get_and_update(ipt, "1.1.1.1/24", counter)
+      iex> org
+      0
+      iex> get(ipt, "1.1.1.0/24")
+      {"1.1.1.0/24", 1}
+      iex> {org, ipt} = get_and_update(ipt, "1.1.1.0/24", fn _ -> :pop end)
+      iex> org
+      1
+      iex> get(ipt, "1.1.1.0/24")
+      nil
+
+      # aggregate stats on a /24
+      iex> count = fn {_, v} -> {v, v + 1}
+      ...>   nil -> {0, 1}
+      ...> end
+      iex> track = fn ip -> Pfx.new(ip) |> Pfx.keep(24) end
+      iex>
+      iex> ipt = new()
+      iex> {_, ipt} = get_and_update(ipt, track.("1.1.1.1"), count)
+      iex> {_, ipt} = get_and_update(ipt, track.({1, 1, 1, 2}), count)
+      iex> {org, ipt} = get_and_update(ipt, track.({{1, 1, 1, 3}, 32}), count)
+      iex> org
+      2
+      iex> get(ipt, "1.1.1.0/24")
+      {"1.1.1.0/24", 3}
+
+      # note that Pfx.keep({1, 1, 1, 2}, 24) yields {1, 1, 1, 0} since its
+      # return value mimicks its argument and thus results in a full prefix,
+      # hence the need for track.(ip)
+
+  """
+  @spec get_and_update(t, prefix(), (nil | {bitstring, any} -> {any, any} | :pop)) :: {any, t}
+  def get_and_update(%__MODULE__{} = trie, prefix, fun) when is_function(fun, 1) do
+    pfx = Pfx.new(prefix)
+    tree = radix(trie, pfx.maxlen)
+    {val, tree} = Radix.get_and_update(tree, pfx.bits, fun)
+    {val, Map.put(trie, pfx.maxlen, tree)}
+  rescue
+    FunctionClauseError -> raise(arg_err(:bad_retval))
+    err -> raise err
+  end
+
+  def get_and_update(trie, _prefix, fun) when is_function(fun, 1),
+    do: raise(arg_err(:bad_trie, trie))
+
+  def get_and_update(_trie, _prefix, fun),
+    do: raise(arg_err(:bad_fun, {fun, 1}))
+
+  @doc """
   Returns true if given `prefix` is present in `trie`, false otherwise.
 
   The check is done based on an exact match, unless the option `match: :lpm`
@@ -493,6 +584,7 @@ defmodule Iptrie do
       true
 
   """
+
   @spec has_prefix?(t, prefix, keyword) :: boolean
   def has_prefix?(trie, prefix, opts \\ [])
 

@@ -3,9 +3,9 @@
 [![Test](https://github.com/hertogp/iptrie/actions/workflows/elixir.yml/badge.svg)](https://github.com/hertogp/iptrie/actions/workflows/elixir.yml)
 [![Module Version](https://img.shields.io/hexpm/v/iptrie.svg)](https://hex.pm/packages/iptrie)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/iptrie/)
-[![Total Download](https://img.shields.io/hexpm/dt/iptrie.svg)](https://hex.pm/packages/iptrie)
 [![License](https://img.shields.io/hexpm/l/iptrie.svg)](https://github.com/hertogp/iptrie/blob/master/LICENSE)
 [![Last Updated](https://img.shields.io/github/last-commit/hertogp/iptrie.svg)](https://github.com/hertogp/iptrie/commits/master)
+[![Total Download](https://img.shields.io/hexpm/dt/iptrie.svg)](https://hex.pm/packages/iptrie)
 
 <!-- @MODULEDOC -->
 
@@ -161,7 +161,7 @@ list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:iptrie, "~> 0.5.0"}
+    {:iptrie, "~> 0.6.0"}
   ]
 end
 ```
