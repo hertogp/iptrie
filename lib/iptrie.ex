@@ -617,8 +617,10 @@ defmodule Iptrie do
   search `prefix`.
 
   This returns the less specific entries that enclose the given search
-  `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
-  present, the search key will be included in the result.
+  `prefix`.  Note that any bitstring is always a prefix of itself.  So, unless
+  the option `:exclude` is set to `true`, the search key will be excluded in
+  the result.  Any other value for `:exclude` is interpreted as false, which
+  means the default action is to include the search key, if present.
 
   ## Example
 
@@ -635,19 +637,33 @@ defmodule Iptrie do
       ]
       iex> less(ipt, "2.2.2.2")
       []
+      #
+      # exclusive search
+      #
+      iex> less(ipt, "1.1.1.0/30", exclude: true)
+      [{"1.1.1.0/25", "A25-lower"}]
 
   """
-  @spec less(t(), prefix()) :: list({prefix(), any})
-  def less(%__MODULE__{} = trie, prefix) do
+  @spec less(t(), prefix(), Keyword.t()) :: list({prefix(), any})
+  def less(trie, prefix, opts \\ [])
+
+  def less(%__MODULE__{} = trie, prefix, opts) do
     pfx = Pfx.new(prefix)
     tree = radix(trie, pfx.maxlen)
+
+    exclude =
+      case Keyword.get(opts, :exclude, false) do
+        true -> fn {k, _v} -> k != pfx.bits end
+        _ -> fn _ -> true end
+      end
 
     case Radix.less(tree, pfx.bits) do
       [] ->
         []
 
       list ->
-        Enum.map(list, fn {bits, value} ->
+        Enum.filter(list, exclude)
+        |> Enum.map(fn {bits, value} ->
           {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
         end)
     end
@@ -655,7 +671,7 @@ defmodule Iptrie do
     err -> raise err
   end
 
-  def less(trie, _prefix),
+  def less(trie, _prefix, _opts),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
@@ -785,8 +801,10 @@ defmodule Iptrie do
   the stored prefix.
 
   This returns the more specific entries that are enclosed by given search
-  `prefix`.  Note that any bitstring is always a prefix of itself.  So, if
-  present, the search `prefix` will be included in the result.
+  `prefix`.  Note that any bitstring is always a prefix of itself.  So, unless
+  the option `:exclude` is set to `true` the search key, if present, will be
+  included in the results.  Any other value for `:exclude` is ignored, which
+  means the default action is to include the search key (if present).
 
   ## Example
 
@@ -794,27 +812,47 @@ defmodule Iptrie do
       ...> |> put("1.1.1.0/25", "A25-lower")
       ...> |> put("1.1.1.128/25", "A25-upper")
       ...> |> put("1.1.1.0/30", "A30")
-      ...> |> put("1.1.2.0/24", "B24")
+      ...> |> put("1.1.1.0/24", "A24")
       iex>
       iex> more(ipt, "1.1.1.0/24")
+      [
+        {"1.1.1.0/30", "A30"},
+        {"1.1.1.0/25", "A25-lower"},
+        {"1.1.1.0/24", "A24"},
+        {"1.1.1.128/25", "A25-upper"}
+      ]
+      #
+      # exclusive search
+      #
+      iex> more(ipt, "1.1.1.0/24", exclude: true)
       [
         {"1.1.1.0/30", "A30"},
         {"1.1.1.0/25", "A25-lower"},
         {"1.1.1.128/25", "A25-upper"}
       ]
 
+
   """
-  @spec more(t(), prefix()) :: list({prefix(), any})
-  def more(%__MODULE__{} = trie, prefix) do
+  @spec more(t(), prefix(), Keyword.t()) :: list({prefix(), any})
+  def more(trie, prefix, opts \\ [])
+
+  def more(%__MODULE__{} = trie, prefix, opts) do
     pfx = Pfx.new(prefix)
     tree = radix(trie, pfx.maxlen)
+
+    exclude =
+      case Keyword.get(opts, :exclude, false) do
+        true -> fn {k, _v} -> k != pfx.bits end
+        _ -> fn _ -> true end
+      end
 
     case Radix.more(tree, pfx.bits) do
       [] ->
         []
 
       list ->
-        Enum.map(list, fn {bits, value} ->
+        Enum.filter(list, exclude)
+        |> Enum.map(fn {bits, value} ->
           {Pfx.marshall(%{pfx | bits: bits}, prefix), value}
         end)
     end
@@ -822,7 +860,7 @@ defmodule Iptrie do
     err -> raise err
   end
 
-  def more(trie, _prefix),
+  def more(trie, _prefix, _opts),
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
@@ -1412,7 +1450,7 @@ defmodule Iptrie do
     do: raise(arg_err(:bad_trie, trie))
 
   @doc """
-  Looks up `prefix` and, if found,  update its value or insert the `default`
+  Looks up `prefix` and, if found, updates its value or insert the `default`
   under `prefix`.
 
   Uses longest prefix match, so search `prefix` is usually matched by some less

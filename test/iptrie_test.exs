@@ -303,10 +303,21 @@ defmodule IptrieTest do
 
   # Iptrie.less/2
 
-  test "less/2 returns all less specifics" do
+  test "less/3 returns all less specifics" do
     t = @test_trie
 
     assert less(t, "1.1.1.1") == [
+             {"1.1.1.0/25", 2},
+             {"1.1.1.0/24", 1}
+           ]
+
+    assert less(t, "1.1.1.1", exclude: false) == [
+             {"1.1.1.0/25", 2},
+             {"1.1.1.0/24", 1}
+           ]
+
+    # really need to provide true, anything else is ignored
+    assert less(t, "1.1.1.1", exclude: :yes) == [
              {"1.1.1.0/25", 2},
              {"1.1.1.0/24", 1}
            ]
@@ -317,7 +328,34 @@ defmodule IptrieTest do
            ]
   end
 
-  test "less/2 raises on invalid input" do
+  test "less/3 returns all less specifics, exclusive search" do
+    t = @test_trie
+
+    assert less(t, "1.1.1.0", exclude: true) == [
+             {"1.1.1.0/25", 2},
+             {"1.1.1.0/24", 1}
+           ]
+
+    assert less(t, "1.1.1.0/26", exclude: true) == [
+             {"1.1.1.0/25", 2},
+             {"1.1.1.0/24", 1}
+           ]
+
+    assert less(t, "1.1.1.0/25", exclude: true) == [
+             {"1.1.1.0/24", 1}
+           ]
+
+    assert less(t, "1.1.1.255", exclude: true) == [
+             {"1.1.1.128/25", 3},
+             {"1.1.1.0/24", 1}
+           ]
+
+    assert less(t, "1.1.1.128/25", exclude: true) == [
+             {"1.1.1.0/24", 1}
+           ]
+  end
+
+  test "less/3 raises on invalid input" do
     t = new()
     for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> less(t, pfx) end)
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> less(tree, "0.0.0.0/0") end)
@@ -419,10 +457,17 @@ defmodule IptrieTest do
   end
 
   # Iptrie.more/2
-  test "more/2 gets all more specifics from the trie" do
+  test "more/3 gets all more specifics from the trie" do
     t = @test_trie
 
     assert more(t, "1.1.1.0/24") == [
+             {"1.1.1.0/25", 2},
+             {"1.1.1.0/24", 1},
+             {"1.1.1.128/25", 3}
+           ]
+
+    # exclude really has to be true
+    assert more(t, "1.1.1.0/24", exclude: :yes) == [
              {"1.1.1.0/25", 2},
              {"1.1.1.0/24", 1},
              {"1.1.1.128/25", 3}
@@ -434,7 +479,22 @@ defmodule IptrieTest do
            ]
   end
 
-  test "more/2 raises on invalid input" do
+  test "more/3 gets more specifics, exclusive search" do
+    t = @test_trie
+
+    assert more(t, "1.1.1.0/24", exclude: true) == [
+             {"1.1.1.0/25", 2},
+             {"1.1.1.128/25", 3}
+           ]
+
+    assert more(t, "11-22-33-00-00-00/24") == [
+             {"11-22-33-00-00-00/24", 6}
+           ]
+
+    assert more(t, "11-22-33-00-00-00/24", exclude: true) == []
+  end
+
+  test "more/3 raises on invalid input" do
     t = new()
     for pfx <- @bad_pfx, do: assert_raise(ArgumentError, fn -> more(t, pfx) end)
     for tree <- @bad_trees, do: assert_raise(ArgumentError, fn -> more(tree, "0.0.0.0/0") end)
