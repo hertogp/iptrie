@@ -537,11 +537,14 @@ defmodule Iptrie do
       iex> ipt = new()
       iex> {_, ipt} = get_and_update(ipt, track.("1.1.1.1"), count)
       iex> {_, ipt} = get_and_update(ipt, track.({1, 1, 1, 2}), count)
+      iex> {_, ipt} = get_and_update(ipt, track.("acdc::/64"), count)
       iex> {org, ipt} = get_and_update(ipt, track.({{1, 1, 1, 3}, 32}), count)
       iex> org
       2
       iex> get(ipt, "1.1.1.0/24")
       {"1.1.1.0/24", 3}
+      iex> get(ipt, "acdc::/24")
+      {"acdc:0:0:0:0:0:0:0/24", 1}
 
       # note that Pfx.keep({1, 1, 1, 2}, 24) yields {1, 1, 1, 0} since its
       # return value mimicks its argument and thus results in a full prefix,
