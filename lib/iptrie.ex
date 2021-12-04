@@ -710,9 +710,10 @@ defmodule Iptrie do
 
   This returns the less specific entries that enclose the given search
   `prefix`.  Note that any bitstring is always a prefix of itself.  So, unless
-  the option `:exclude` is set to `true`, the search key will be excluded in
-  the result.  Any other value for `:exclude` is interpreted as false, which
-  means the default action is to include the search key, if present.
+  the option `:exclude` is set to `true`, the search key will be included in
+  the result if present.  Any other value for `:exclude` is interpreted as
+  false, which means the default action is to include the search key, if
+  present.
 
   ## Example
 
