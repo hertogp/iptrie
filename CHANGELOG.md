@@ -7,14 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
-### changed
-
-- [ ] updated dependency Pfx to v0.12.0
-
 ### added
 
 - [ ] Iptrie.iana_special/2, longest prefix match lookup in IANA IPv4/6 Specical-Purpose Address Registries
 
+### changed
+
+- [ ] updated dependency Pfx to v0.12.0
+
+### fixed
+
+- [x] typespec for `t:Iptrie.t/0` by adding optional integer -> Radix.t
 
 ## [v0.6.0] - 2021-12-04
 

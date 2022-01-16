@@ -24,7 +24,8 @@ defmodule Iptrie do
   interpreted as IPv4 or IPv6 representations.
 
   """
-  @type t :: %__MODULE__{}
+  @type t :: %{optional(integer) => tuple, __struct__: __MODULE__}
+  # @type t :: %__MODULE__{}
 
   @typedoc """
   The type of a prefix is its maxlen property.
@@ -794,7 +795,7 @@ defmodule Iptrie do
       ** (ArgumentError) expected a ipv4/ipv6 CIDR or EUI-48/64 string, got "3.3.3.300"
 
   """
-  @spec lookup(t(), prefix()) :: {prefix(), any} | nil
+  @spec lookup(t, prefix()) :: {prefix(), any} | nil
   def lookup(%__MODULE__{} = trie, prefix) do
     pfx = Pfx.new(prefix)
     tree = radix(trie, pfx.maxlen)
