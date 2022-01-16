@@ -5,19 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v0.7.0] - 2022-01-16
 
 ### added
 
-- [ ] Iptrie.iana_special/2, longest prefix match lookup in IANA IPv4/6 Specical-Purpose Address Registries
+- `Iptrie.Iana` module to access IANA IPv4/6 Specical-Purpose Address Registries
 
 ### changed
 
-- [ ] updated dependency Pfx to v0.12.0
+- updated dependency Pfx to v0.12.0
 
 ### fixed
 
-- [x] typespec for `t:Iptrie.t/0` by adding optional integer -> Radix.t
+- typespec for `t:Iptrie.t/0` by adding optional integer -> Radix.t
+
 
 ## [v0.6.0] - 2021-12-04
 
