@@ -5,11 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+
+### changed
+
+- [ ] updated dependency Pfx to v0.12.0
+
+### added
+
+- [ ] Iptrie.iana_special/2, longest prefix match lookup in IANA IPv4/6 Specical-Purpose Address Registries
+
+
 ## [v0.6.0] - 2021-12-04
 
 ### added
 
-- [ ] Iptrie.get_and_update to do update a key,value-pair in one go.
+- `Iptrie.get_and_update/3` to do update a key,value-pair in one go.
 
 ### changed
 
