@@ -72,9 +72,6 @@ defmodule Iptrie do
   defp arg_err(:bad_type, arg),
     do: ArgumentError.exception("expected a maxlen (non_neg_integer) value, got #{inspect(arg)}")
 
-  defp arg_err(:bad_retval),
-    do: ArgumentError.exception("the callback yielded a bad return value")
-
   # API
 
   @doc """
@@ -559,7 +556,6 @@ defmodule Iptrie do
     {val, tree} = Radix.get_and_update(tree, pfx.bits, fun)
     {val, Map.put(trie, pfx.maxlen, tree)}
   rescue
-    FunctionClauseError -> raise(arg_err(:bad_retval))
     err -> raise err
   end
 

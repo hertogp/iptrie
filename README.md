@@ -99,6 +99,32 @@ Since prefixes are stored in specific radix trees based on the `maxlen` of
 given prefix, you could also mix IPv4, IPv6, EUI-48, EUI-64 prefixes and
 possibly others, in a single Iptrie.
 
+## IANA Special-Purpose Registries
+
+The `Iptrie.Iana` module enables retrieval of properties for prefixes registered
+in one of the IPv4 or IPv6 special-purpose address registries.
+
+    iex> alias Iptrie.Iana
+    iex> Iana.lookup("10.11.12.13")
+    {"10.0.0.0/8",
+     %{
+       allocation: "1996-02",
+       destination: true,
+       forward: true,
+       global: false,
+       name: "private-use",
+       prefix: "10.0.0.0/8",
+       reserved: false,
+       source: true,
+       spec: ["rfc1918"]
+     }}
+
+     # or access some property directly
+
+     iex> alias Iptrie.Iana
+     iex> Iana.lookup("2001::", :name)
+     "teredo"
+
 ## Examples
 
 Summarize an Iptrie containing a list of full length prefixes within a /24,

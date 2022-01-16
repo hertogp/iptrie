@@ -255,6 +255,11 @@ defmodule IptrieTest do
     {org, t} = get_and_update(t, "11-22-33-44-55-66/24", f)
     assert org == 6
     assert get(t, "11-22-33-44-55-66/24") == {"11-22-33-00-00-00/24", 7}
+
+    # bad return value by callback
+    assert_raise ArgumentError, fn -> get_and_update(t, "1.1.1.0/24", fn _ -> :oops end) end
+    # bad callback signature
+    assert_raise ArgumentError, fn -> get_and_update(t, "1.1.1.0/24", fn _, _ -> :oops end) end
   end
 
   test "get_and_update/3 raises on invalid input" do
@@ -333,6 +338,15 @@ defmodule IptrieTest do
              %Pfx{bits: <<172, 220, 25, 117>>, maxlen: 128},
              %Pfx{bits: <<172, 220, 25, 118>>, maxlen: 128}
            ]
+
+    # bad tries
+    assert_raise ArgumentError, fn -> keys([]) end
+    assert_raise ArgumentError, fn -> keys(%{}) end
+
+    # malformed trie on purpose
+    ipt = new()
+    ipt = Map.put(ipt, 33, [])
+    assert_raise ArgumentError, fn -> keys(ipt) end
   end
 
   test "keys/1 raises on invalid Iptries" do
@@ -462,6 +476,14 @@ defmodule IptrieTest do
 
     for bad <- @bad_trees,
         do: assert_raise(ArgumentError, fn -> merge(good, bad) end)
+
+    # bad trie
+    assert_raise ArgumentError, fn -> merge(@test_trie, []) end
+    assert_raise ArgumentError, fn -> merge([], @test_trie) end
+
+    # bad trie by user interaction
+    bad = new() |> Map.put(33, hd(@bad_trees))
+    assert_raise ArgumentError, fn -> merge(@test_trie, bad) end
   end
 
   test "merge/3 merges two tries into one with conflict resolution" do
@@ -506,6 +528,14 @@ defmodule IptrieTest do
         do: assert_raise(ArgumentError, fn -> merge(good, bad, keep1) end)
 
     assert_raise ArgumentError, fn -> merge(good, good, fn x -> x end) end
+
+    # bad trie
+    assert_raise ArgumentError, fn -> merge(@test_trie, [], keep1) end
+    assert_raise ArgumentError, fn -> merge([], @test_trie, keep1) end
+
+    # bad trie by user interaction
+    bad = new() |> Map.put(33, hd(@bad_trees))
+    assert_raise ArgumentError, fn -> merge(@test_trie, bad, keep1) end
   end
 
   # Iptrie.more/2
@@ -529,6 +559,12 @@ defmodule IptrieTest do
              {"11-22-33-44-55-67-00-00/48", 9},
              {"11-22-33-44-55-66-00-00/48", 8}
            ]
+
+    # no prefixes match
+    assert more(t, "2.2.2.2") == []
+
+    # raises on invalid input
+    assert_raise ArgumentError, fn -> more(t, "2.2.2.333") end
   end
 
   test "more/3 gets more specifics, exclusive search" do
@@ -896,6 +932,10 @@ defmodule IptrieTest do
   test "to_list/1 raises on invalid input" do
     for tree <- @bad_trees,
         do: assert_raise(ArgumentError, fn -> to_list(tree) end)
+
+    # trie malformed by user interaction
+    t = new() |> Map.put(32, hd(@bad_trees))
+    assert_raise ArgumentError, fn -> to_list(t) end
   end
 
   test "to_list/2 returns list prefixes of a radix tree of given type" do
@@ -993,6 +1033,10 @@ defmodule IptrieTest do
   # Iptrie.values/1
   test "values/1 returns all values of all radix trees" do
     assert values(@test_trie) |> Enum.sort() == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+    # trie malformed by user interaction
+    t = new() |> Map.put(32, [])
+    assert_raise ArgumentError, fn -> values(t) end
   end
 
   test "values/1 raises on invalid Iptries" do
@@ -1013,5 +1057,6 @@ defmodule IptrieTest do
 
     assert_raise ArgumentError, fn -> values(@test_trie, -1) end
     assert_raise ArgumentError, fn -> values(@test_trie, [32]) end
+    assert_raise ArgumentError, fn -> values(@test_trie, :oops) end
   end
 end
