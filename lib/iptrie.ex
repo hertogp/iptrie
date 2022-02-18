@@ -74,6 +74,9 @@ defmodule Iptrie do
 
   # API
 
+  # - delegates
+  defdelegate iana_special(pfx), to: Iptrie.Iana, as: :lookup
+
   @doc """
   Returns the number of prefix,value-pairs in given `trie`.
 

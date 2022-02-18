@@ -65,7 +65,7 @@ defmodule Iptrie.MixProject do
       {:pfx, "~> 0.6"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: :dev, runtime: false},
-      {:credo, "~> 0.8", only: [:dev, :test]},
+      {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:benchee, "~> 1.0", only: :dev}
     ]
   end

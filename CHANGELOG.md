@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+
+## TODO
+
+- [ ] Better wording in Iptrie.Iana moduledoc: there are no functions that
+  retrieve a snapshot.  Only functions that consult an Iptrie built using
+  the snapshot taken by the underlying Pfx module.
+
+### added
+
+- [ ] Iptrie.iana_special which delegates to IANA.lookup
+
+
+
 ## [v0.7.0] - 2022-01-16
 
 ### added
