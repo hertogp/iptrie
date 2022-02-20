@@ -15,10 +15,9 @@ defmodule Iptrie.Iana do
   - `Iptrie.iana_special/2`, which delegates to `Iptrie.Iana.lookup/2`.
 
   Running `mix iana.special` will show the number of records and last update of
-  these registries by Iana, as well as the numboer of records and last update
-  of the local snapshot.  If the snapshot is out-of-date, it will be updated
-  with the new information, in which case both Pfx and Iptrie.Iana module will
-  need to be recompiled.
+  these registries by Iana, as well as that of the local snapshot.  If the
+  snapshot is out-of-date, it will be updated with the new information, in
+  which case both Pfx and Iptrie.Iana module will need to be recompiled.
 
   ## Examples
 
