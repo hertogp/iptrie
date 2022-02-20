@@ -1,17 +1,24 @@
 defmodule Iptrie.Iana do
   @moduledoc ~S"""
-  Functions to access or retrieve a snapshot of the IANA IPv4/6 Special-Purpose Address Registries.
+  Functions to access a local snapshot of the IANA IPv4/6 Special-Purpose Address Registries.
 
-  They include:
+  See also:
 
   - [IPv4 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml)
   - [IPv6 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml)
 
-  There are only two functions:
-  - `Iptrie.Iana.get/1` to retrieve the list of prefixes and properties for IPv4 or IPv6 prefixes.
-  - `Iptrie.Iana.lookup/2` to retrieve a single property or all properties for a given prefix.
+  At compile time, this module builds an Iptrie.t using Pfx's local copy of the
+  IANA special-purpose address registries, which can then be accessed using:
 
-  See `Pfx.iana_special/2` for more information.
+  - `Iptrie.Iana.get/1` to retrieve the list of prefixes and properties for IPv4 or IPv6 prefixes
+  - `Iptrie.Iana.lookup/2` to retrieve a single or all properties for a given prefix, and
+  - `Iptrie.iana_special/2`, which delegates to `Iptrie.Iana.lookup/2`.
+
+  Running `mix iana.special` will show the number of records and last update of
+  these registries by Iana, as well as the numboer of records and last update
+  of the local snapshot.  If the snapshot is out-of-date, it will be updated
+  with the new information, in which case both Pfx and Iptrie.Iana module will
+  need to be recompiled.
 
   ## Examples
 
@@ -26,14 +33,31 @@ defmodule Iptrie.Iana do
          prefix: "10.0.0.0/8",
          reserved: false,
          source: true,
-         spec: ["rfc1918"]
+         spec: ["rfc1918"],
+         termination: :na
        }}
 
-       iex> Iptrie.Iana.lookup("fc00::", :global)
-       false
+      iex> Iptrie.iana_special("fc00::")
+      {"fc00::/7",
+        %{
+          allocation: "2005-10",
+          destination: true,
+          forward: true,
+          global: false,
+          name: "unique-local",
+          prefix: "fc00::/7",
+          reserved: false,
+          source: true,
+          spec: ["rfc4193", "rfc8190"],
+          termination: :na
+       }}
 
-       iex> Iptrie.Iana.lookup("fc00::", :name)
-       "unique-local"
+      # retrieve a single property
+      iex> Iptrie.Iana.lookup("fc00::", :global)
+      false
+
+      iex> Iptrie.Iana.lookup("fc00::", :name)
+      "unique-local"
 
   """
 
@@ -60,7 +84,8 @@ defmodule Iptrie.Iana do
          prefix: "0.0.0.0/32",
          reserved: true,
          source: true,
-         spec: ["rfc1122"]
+         spec: ["rfc1122"],
+         termination: :na
        }}
 
       iex> get(:ip6) |> length()
@@ -77,7 +102,8 @@ defmodule Iptrie.Iana do
          prefix: "::/128",
          reserved: true,
          source: true,
-         spec: ["rfc4291"]
+         spec: ["rfc4291"],
+         termination: :na
        }}
 
       # get all non-globally-routed IPv4 prefixes
@@ -101,25 +127,43 @@ defmodule Iptrie.Iana do
     do: Iptrie.to_list(@iana, 128)
 
   @doc """
-  Returns either nil, a property value or property map for given prefix
+  Performs a longest prefix match against the local IPv4 and IPv6 special
+  purpose address registries and Returns either nil, a property value or
+  property map for given search prefix.
 
   ## Examples
 
-      iex> lookup("10.10.10.10")
-      {"10.0.0.0/8",
-       %{
-         allocation: "1996-02",
-         destination: true,
-         forward: true,
-         global: false,
-         name: "private-use",
-         prefix: "10.0.0.0/8",
-         reserved: false,
-         source: true,
-         spec: ["rfc1918"]
-       }}
+    iex(16)> lookup("0.0.0.0")
+    {"0.0.0.0",
+     %{
+       allocation: "1981-09",
+       destination: false,
+       forward: false,
+       global: false,
+       name: "this-host-on-this-network",
+       prefix: "0.0.0.0/32",
+       reserved: true,
+       source: true,
+       spec: ["rfc1122"],
+       termination: :na
+     }}
 
-      # non-existing property
+    iex(17)> lookup("0.0.0.1")
+    {"0.0.0.0/8",
+     %{
+       allocation: "1981-09",
+       destination: false,
+       forward: false,
+       global: false,
+       name: "this-network",
+       prefix: "0.0.0.0/8",
+       reserved: true,
+       source: true,
+       spec: ["rfc791"],
+       termination: :na
+     }}
+
+      # a non-existing property `:missing`
       iex> lookup("10.10.10.10", :missing)
       nil
 

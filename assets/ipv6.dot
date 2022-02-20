@@ -6,13 +6,13 @@ digraph Radix {
 N3 [label=<
   <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
     <TR><TD PORT="N3" BGCOLOR="green">leaf</TD></TR>
-    <TR><TD>acdc:1978:0:0:0:0:0:0/32<br/>Powerage</TD></TR>
+    <TR><TD>acdc:1978::/32<br/>Powerage</TD></TR>
   </TABLE>
   >, shape="plaintext"];
 N2 [label=<
   <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
     <TR><TD PORT="N2" BGCOLOR="green">leaf</TD></TR>
-    <TR><TD>acdc:1975:0:0:0:0:0:0/32<br/>T.N.T</TD></TR>
+    <TR><TD>acdc:1975::/32<br/>T.N.T</TD></TR>
   </TABLE>
   >, shape="plaintext"];
 N4:R -> N3;
@@ -26,7 +26,7 @@ N4 [label=<
 N1 [label=<
   <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
     <TR><TD PORT="N1" BGCOLOR="green">leaf</TD></TR>
-    <TR><TD>0:0:0:0:0:0:0:0/0<br/>no dynamite</TD></TR>
+    <TR><TD>::/0<br/>no dynamite</TD></TR>
   </TABLE>
   >, shape="plaintext"];
 N5:R -> N4;

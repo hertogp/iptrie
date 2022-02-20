@@ -44,13 +44,13 @@ arguments given, if possible.
     {%Pfx{bits: <<1, 2, 3>>, maxlen: 32}, "v4"}
     iex>
     iex> lookup(ipt, "acdc:1975::")
-    {"acdc:1975:0:0:0:0:0:0/32", "T.N.T"}
+    {"acdc:1975::/32", "T.N.T"}
     iex>
     iex> # separate trees, separate default "routes"
     iex> lookup(ipt, "10.11.12.13")
     {"0.0.0.0/0", "v4 default"}
     iex> lookup(ipt, "abba::")
-    {"0:0:0:0:0:0:0:0/0", "no dynamite"}
+    {"::/0", "no dynamite"}
     iex>
     iex> # visualize the IPv4 & IPv6 radix trees
     iex> kv32 = fn {k, v} -> "#{Pfx.new(k, 32)}<br/>#{v}" end
@@ -116,7 +116,8 @@ in one of the IPv4 or IPv6 special-purpose address registries.
        prefix: "10.0.0.0/8",
        reserved: false,
        source: true,
-       spec: ["rfc1918"]
+       spec: ["rfc1918"],
+       termination: :na
      }}
 
      # or access some property directly
@@ -155,8 +156,8 @@ Find the more specific entries in an Iptrie for a given search prefix
     ...> |> more("acdc::/16")
     ...> |> Enum.map(fn {p, v} -> {"#{p}", v} end)
     [
-       {"acdc:1977:0:0:0:0:0:0/32", "LTBR"},
-       {"acdc:1975:0:0:0:0:0:0/32", "TNT"}
+       {"acdc:1977::/32", "LTBR"},
+       {"acdc:1975::/32", "TNT"}
     ]
 
 Find the less specific entries in an Iptrie for a given search prefix

@@ -1,4 +1,5 @@
 defmodule Iptrie do
+  # credo:disable-for-this-file Credo.Check.Warning.RaiseInsideRescue
   @external_resource "README.md"
 
   @moduledoc File.read!("README.md")
@@ -75,7 +76,8 @@ defmodule Iptrie do
   # API
 
   # - delegates
-  defdelegate iana_special(pfx), to: Iptrie.Iana, as: :lookup
+  @spec iana_special(Pfx.prefix(), atom | nil) :: nil | map | any
+  defdelegate iana_special(pfx, property \\ nil), to: Iptrie.Iana, as: :lookup
 
   @doc """
   Returns the number of prefix,value-pairs in given `trie`.
@@ -413,8 +415,8 @@ defmodule Iptrie do
       ...> |> to_list()
       ...> |> Enum.map(fn {pfx, value} -> {"#{pfx}", value} end)
       [
-        {"acdc:1975:0:0:0:0:0:0/32", "rock"},
-        {"acdc:1976:0:0:0:0:0:0/32", "rock"}
+        {"acdc:1975::/32", "rock"},
+        {"acdc:1976::/32", "rock"}
       ]
 
   """
@@ -545,7 +547,7 @@ defmodule Iptrie do
       iex> get(ipt, "1.1.1.0/24")
       {"1.1.1.0/24", 3}
       iex> get(ipt, "acdc::/24")
-      {"acdc:0:0:0:0:0:0:0/24", 1}
+      {"acdc::/24", 1}
 
       # note that Pfx.keep({1, 1, 1, 2}, 24) yields {1, 1, 1, 0} since its
       # return value mimicks its argument and thus results in a full prefix,
@@ -786,12 +788,12 @@ defmodule Iptrie do
       iex> lookup(ipt, "1.1.1.1")
       {"1.1.1.0/24", 1}
       iex> lookup(ipt, "acdc:1975:1::")
-      {"acdc:1975:0:0:0:0:0:0/32", 3}
+      {"acdc:1975::/32", 3}
       iex>
       iex> lookup(ipt, "3.3.3.3")
       nil
       iex> lookup(ipt, "3.3.3.300")
-      ** (ArgumentError) expected a ipv4/ipv6 CIDR or EUI-48/64 string, got "3.3.3.300"
+      ** (ArgumentError) expected an ipv4/ipv6 CIDR or EUI-48/64 string, got "3.3.3.300"
 
   """
   @spec lookup(t, prefix()) :: {prefix(), any} | nil
@@ -864,7 +866,7 @@ defmodule Iptrie do
        iex> for ip4 <- keys(t, 32), do: "#{ip4}"
        ["1.1.1.0/24", "2.2.2.0/24", "3.3.3.0/24"]
        iex> for ip6 <- keys(t, 128), do: "#{ip6}"
-       ["acdc:1975:0:0:0:0:0:0/32", "acdc:2021:0:0:0:0:0:0/32"]
+       ["acdc:1975::/32", "acdc:2021::/32"]
        iex> values(t) |> Enum.sum()
        1 + 7 + 3 + 4 + 6
 
@@ -970,7 +972,7 @@ defmodule Iptrie do
 
   """
   @spec new() :: t()
-  def new(),
+  def new,
     do: %__MODULE__{}
 
   @doc """
@@ -1243,8 +1245,8 @@ defmodule Iptrie do
       %{
         "1.1.1.0/24" => 1,
         "2.2.2.0/24" => 2,
-        "acdc:1975:0:0:0:0:0:0/32" => 3,
-        "acdc:2021:0:0:0:0:0:0/32" => 4
+        "acdc:1975::/32" => 3,
+        "acdc:2021::/32" => 4
       }
 
   """
@@ -1371,7 +1373,7 @@ defmodule Iptrie do
       iex> get(t2, "1.1.1.0/24")
       {"1.1.1.0/24", 1}
       iex> get(t2, "acdc::/16")
-      {"acdc:0:0:0:0:0:0:0/16", 3}
+      {"acdc::/16", 3}
 
       # use longest match
       iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"acdc::/16", 3}])
@@ -1381,7 +1383,7 @@ defmodule Iptrie do
       iex> get(t3, "1.1.1.0/24")
       {"1.1.1.0/24", 1}
       iex> get(t3, "acdc::/16")
-      {"acdc:0:0:0:0:0:0:0/16", 3}
+      {"acdc::/16", 3}
 
       # ignore missing prefixes
       iex> t = new([{"1.1.1.0/24", 1}, {"2.2.2.0/24", 2}, {"acdc::/16", 3}])

@@ -171,7 +171,7 @@ defmodule IptrieTest do
     assert get(t1, "1.1.1.0/24") == {"1.1.1.0/24", 1}
     assert get(t1, "1.1.1.0/25") == {"1.1.1.0/25", 2}
     assert get(t1, "1.1.1.128/25") == {"1.1.1.128/25", 3}
-    assert get(t1, "acdc:1975::/32") == {"acdc:1975:0:0:0:0:0:0/32", 4}
+    assert get(t1, "acdc:1975::/32") == {"acdc:1975::/32", 4}
   end
 
   test "filter/2 raises on invalid Iptries" do
@@ -216,7 +216,7 @@ defmodule IptrieTest do
   test "get/3 uses exact match on correct radix tree" do
     t = @test_trie
     assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", 1}
-    assert get(t, "acdc:1976::/32") == {"acdc:1976:0:0:0:0:0:0/32", 5}
+    assert get(t, "acdc:1976::/32") == {"acdc:1976::/32", 5}
     assert get(t, "11-22-33-00-00-00/24") == {"11-22-33-00-00-00/24", 6}
     assert get(t, "11-22-33-44-55-67-00-00/48") == {"11-22-33-44-55-67-00-00/48", 9}
 
@@ -250,7 +250,7 @@ defmodule IptrieTest do
 
     {org, t} = get_and_update(t, "acdc:1975::/32", f)
     assert org == 4
-    assert get(t, "acdc:1975::/32") == {"acdc:1975:0:0:0:0:0:0/32", 5}
+    assert get(t, "acdc:1975::/32") == {"acdc:1975::/32", 5}
 
     {org, t} = get_and_update(t, "11-22-33-44-55-66/24", f)
     assert org == 6
@@ -431,7 +431,7 @@ defmodule IptrieTest do
   test "lookup/2 uses longest prefix matching" do
     t = @test_trie
     assert lookup(t, "1.1.1.1") == {"1.1.1.0/25", 2}
-    assert lookup(t, "acdc:1976::1") == {"acdc:1976:0:0:0:0:0:0/32", 5}
+    assert lookup(t, "acdc:1976::1") == {"acdc:1976::/32", 5}
     assert lookup(t, "11-22-33-44-55-66") == {"11-22-33-00-00-00/24", 6}
     assert lookup(t, "11-22-33-44-55-67-01-02") == {"11-22-33-44-55-67-00-00/48", 9}
   end
@@ -465,7 +465,7 @@ defmodule IptrieTest do
 
     # check t got the other_trie's prefix,value entries
     assert get(t, "2.2.2.0/24") == {"2.2.2.0/24", 10}
-    assert get(t, "acdc:1977::/32") == {"acdc:1977:0:0:0:0:0:0/32", 11}
+    assert get(t, "acdc:1977::/32") == {"acdc:1977::/32", 11}
   end
 
   test "merge/2 raises on invalid input" do
@@ -510,7 +510,7 @@ defmodule IptrieTest do
 
     # check t got the other_trie's prefix,value entries
     assert get(t, "2.2.2.0/24") == {"2.2.2.0/24", 10}
-    assert get(t, "acdc:1977::/32") == {"acdc:1977:0:0:0:0:0:0/32", 11}
+    assert get(t, "acdc:1977::/32") == {"acdc:1977::/32", 11}
 
     # an empty trie is not a problem
     assert @test_trie == merge(new(), @test_trie, keep1)
@@ -708,8 +708,8 @@ defmodule IptrieTest do
     assert count(ipt) == 256
     ipt2 = prune(ipt, combine, recurse: true)
     assert count(ipt2) == 1
-    assert get(ipt2, Pfx.new(<<>>, 8)) == {%Pfx{bits: <<>>, maxlen: 8}, 32640}
-    assert Enum.sum(0..255) == 32640
+    assert get(ipt2, Pfx.new(<<>>, 8)) == {%Pfx{bits: <<>>, maxlen: 8}, 32_640}
+    assert Enum.sum(0..255) == 32_640
   end
 
   test "prune/3 prunes across all radix trees" do
@@ -726,7 +726,7 @@ defmodule IptrieTest do
     ipt2 = prune(ipt, combine, recurse: true)
     assert count(ipt2) == 2
     assert get(ipt2, "1.1.1.0/30") == {"1.1.1.0/30", 3}
-    assert get(ipt2, "acdc::0/127") == {"acdc:0:0:0:0:0:0:0/127", 70}
+    assert get(ipt2, "acdc::0/127") == {"acdc::/127", 70}
   end
 
   # Iptrie.put/2

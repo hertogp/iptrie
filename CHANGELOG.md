@@ -7,16 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
-## TODO
+### changed
 
-- [ ] Better wording in Iptrie.Iana moduledoc: there are no functions that
-  retrieve a snapshot.  Only functions that consult an Iptrie built using
-  the snapshot taken by the underlying Pfx module.
+- updated Pfx to latest version, so IPv6 is formatted with shorthand notation
+    - tests were modified accordingly
 
 ### added
 
-- [ ] Iptrie.iana_special which delegates to IANA.lookup
-
+- `Iptrie.iana_special/2` which delegates to `Iptrie.Iana.lookup/2`
 
 
 ## [v0.7.0] - 2022-01-16
