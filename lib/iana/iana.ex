@@ -14,7 +14,7 @@ defmodule Iptrie.Iana do
   - `Iptrie.Iana.lookup/2` to retrieve a single or all properties for a given prefix, and
   - `Iptrie.iana_special/2`, which delegates to `Iptrie.Iana.lookup/2`.
 
-  Running `mix iana.special` will show the number of records and last update of
+  Running `mix iana.specials` will show the number of records and last update of
   these registries by Iana, as well as that of the local snapshot.  If the
   snapshot is out-of-date, it will be updated with the new information, in
   which case both Pfx and Iptrie.Iana module will need to be recompiled.
@@ -34,7 +34,8 @@ defmodule Iptrie.Iana do
          source: true,
          spec: ["rfc1918"],
          termination: :na
-       }}
+       }
+      }
 
       iex> Iptrie.iana_special("fc00::")
       {"fc00::/7",
@@ -49,7 +50,8 @@ defmodule Iptrie.Iana do
           source: true,
           spec: ["rfc4193", "rfc8190"],
           termination: :na
-       }}
+        }
+      }
 
       # retrieve a single property
       iex> Iptrie.Iana.lookup("fc00::", :global)
@@ -85,7 +87,8 @@ defmodule Iptrie.Iana do
          source: true,
          spec: ["rfc1122"],
          termination: :na
-       }}
+       }
+      }
 
       iex> get(:ip6) |> length()
       20
@@ -103,7 +106,8 @@ defmodule Iptrie.Iana do
          source: true,
          spec: ["rfc4291"],
          termination: :na
-       }}
+       }
+      }
 
       # get all non-globally-routed IPv4 prefixes
       iex> get(:ip4)
@@ -132,35 +136,37 @@ defmodule Iptrie.Iana do
 
   ## Examples
 
-    iex(16)> lookup("0.0.0.0")
-    {"0.0.0.0",
-     %{
-       allocation: "1981-09",
-       destination: false,
-       forward: false,
-       global: false,
-       name: "this-host-on-this-network",
-       prefix: "0.0.0.0/32",
-       reserved: true,
-       source: true,
-       spec: ["rfc1122"],
-       termination: :na
-     }}
+      iex(16)> lookup("0.0.0.0")
+      {"0.0.0.0",
+       %{
+         allocation: "1981-09",
+         destination: false,
+         forward: false,
+         global: false,
+         name: "this-host-on-this-network",
+         prefix: "0.0.0.0/32",
+         reserved: true,
+         source: true,
+         spec: ["rfc1122"],
+         termination: :na
+       }
+      }
 
-    iex(17)> lookup("0.0.0.1")
-    {"0.0.0.0/8",
-     %{
-       allocation: "1981-09",
-       destination: false,
-       forward: false,
-       global: false,
-       name: "this-network",
-       prefix: "0.0.0.0/8",
-       reserved: true,
-       source: true,
-       spec: ["rfc791"],
-       termination: :na
-     }}
+      iex(17)> lookup("0.0.0.1")
+      {"0.0.0.0/8",
+       %{
+         allocation: "1981-09",
+         destination: false,
+         forward: false,
+         global: false,
+         name: "this-network",
+         prefix: "0.0.0.0/8",
+         reserved: true,
+         source: true,
+         spec: ["rfc791"],
+         termination: :na
+       }
+      }
 
       # a non-existing property `:missing`
       iex> lookup("10.10.10.10", :missing)
