@@ -550,7 +550,7 @@ defmodule Iptrie do
       {"acdc::/24", 1}
 
       # note that Pfx.keep({1, 1, 1, 2}, 24) yields {1, 1, 1, 0} since its
-      # return value mimicks its argument and thus results in a full prefix,
+      # return value mimics its argument and thus results in a full prefix,
       # hence the need for track.(ip)
 
   """
@@ -1361,7 +1361,7 @@ defmodule Iptrie do
   @doc """
   Returns a new Iptrie containing only given `prefixes` that were found in `trie`.
 
-  If a given prefix does not exist, it is ignored.  Optionally specifiy `match:
+  If a given prefix does not exist, it is ignored.  Optionally specify `match:
   :lpm` to use a longest prefix match instead of exact, which is the default.
 
   ## Examples
