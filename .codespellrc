@@ -1,0 +1,4 @@
+[codespell]
+quiet-level = 7
+skip = .git,.elixir_ls,deps,_build,logs
+disable-colors = true
