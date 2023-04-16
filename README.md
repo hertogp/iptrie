@@ -209,7 +209,7 @@ list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:iptrie, "~> 0.8.0"}
+    {:iptrie, "~> 0.9"}
   ]
 end
 ```

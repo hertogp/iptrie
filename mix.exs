@@ -3,7 +3,7 @@ defmodule Iptrie.MixProject do
 
   # Before publishing to Hex:
   # - update CHANGELOG.md for changes in new version
-  # - set new version tag in mix.exs, README.md
+  # - set new version tag in mix.exs, README.md and CHANGELOG.md
   # - mix test
   # - mix docs
   # - mix dialyzer
@@ -12,7 +12,7 @@ defmodule Iptrie.MixProject do
   # mix hex.publish
 
   @source_url "https://github.com/hertogp/iptrie"
-  @version "0.8.0"
+  @version "0.9.0"
 
   def project do
     [
