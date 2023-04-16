@@ -538,6 +538,96 @@ defmodule IptrieTest do
     assert_raise ArgumentError, fn -> merge(@test_trie, bad, keep1) end
   end
 
+  test "minimize/2 handles neighbours" do
+    f = fn v1, v2 -> if v1 == v2, do: {:ok, v1}, else: nil end
+
+    t =
+      new([
+        {"1.1.1.0/25", true},
+        {"1.1.1.128/25", true},
+        {"acdc::/17", true},
+        {"acdc:8000::/17", true}
+      ])
+      |> minimize(f)
+
+    assert count(t) == 2
+    assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", true}
+    assert get(t, "acdc::/16") == {"acdc::/16", true}
+
+    # order does not matter
+    t =
+      new([
+        {"1.1.1.128/25", true},
+        {"acdc:8000::/17", true},
+        {"acdc::/17", true},
+        {"1.1.1.0/25", true}
+      ])
+      |> minimize(f)
+
+    assert count(t) == 2
+    assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", true}
+    assert get(t, "acdc::/16") == {"acdc::/16", true}
+  end
+
+  test "minimize/2 handles more/less specifics" do
+    f = fn v1, v2 -> if v1 == v2, do: {:ok, v1}, else: nil end
+
+    t =
+      new([
+        {"1.1.1.0/25", true},
+        {"1.1.1.0/24", true},
+        {"acdc::/16", true},
+        {"acdc:8000::/17", true}
+      ])
+      |> minimize(f)
+
+    assert count(t) == 2
+    assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", true}
+    assert get(t, "acdc::/16") == {"acdc::/16", true}
+  end
+
+  test "minimize/2 handles both neighbours and more/less specifics" do
+    f = fn v1, v2 -> if v1 == v2, do: {:ok, v1}, else: nil end
+
+    t =
+      new([
+        {"1.1.1.0/25", true},
+        {"1.1.1.128/25", true},
+        {"1.1.1.128/26", true},
+        {"1.1.1.0/24", true},
+        {"acdc::/16", true},
+        {"acdc:8000::/17", true}
+      ])
+      |> minimize(f)
+
+    assert count(t) == 2
+    assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", true}
+    assert get(t, "acdc::/16") == {"acdc::/16", true}
+  end
+
+  test "minimize/2 only combines prefixes when allowed" do
+    f = fn v1, v2 -> if v1 == v2, do: {:ok, v1}, else: nil end
+
+    t =
+      new([
+        {"1.1.1.0/24", false},
+        {"1.1.1.0/25", true},
+        {"1.1.1.128/25", true},
+        {"acdc::/17", true},
+        {"acdc:8000::/17", true}
+      ])
+      |> minimize(f)
+
+    # In this case, the /25's won't be comined as neighbours, since their
+    # parent also exists.  Since the children have different value than
+    # their parent, the all remain in the trie.
+    assert count(t) == 4
+    assert get(t, "1.1.1.0/24") == {"1.1.1.0/24", false}
+    assert get(t, "1.1.1.0/25") == {"1.1.1.0/25", true}
+    assert get(t, "1.1.1.128/25") == {"1.1.1.128/25", true}
+    assert get(t, "acdc::/16") == {"acdc::/16", true}
+  end
+
   # Iptrie.more/2
   test "more/3 gets all more specifics from the trie" do
     t = @test_trie

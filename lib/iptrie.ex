@@ -894,6 +894,79 @@ defmodule Iptrie do
   def merge(_trie1, trie2, _fun),
     do: raise(arg_err(:bad_trie, trie2))
 
+  @doc ~S"""
+  Minimizes a trie by pruning and removing more specific prefixes, where possible.
+
+  `fun` has function signature `(any, any) -> {:ok, any} | nil`.
+  Whenever prefixes are found that could be combined, `fun` is called
+  with their values.
+
+  If `fun` returns nil, nothing happens.
+
+  In case of two neighbours, a non-existing parent and an `{:ok, value}`, the
+  value is stored under the parent and the two neighbors are deleted. `fun` is
+  called with the leftmost neighbour's value as its first argument while the
+  second argument is the rightmost neighbour's value.
+
+  In case of a less and a more specific prefix and an `{:ok, value}`, the value
+  is stored under the less specific prefix and the more specific prefix is deleted.
+  `fun` is called with the less spefic prefix' value as its first argument and
+  the more specific prefix's value as its second argument.
+
+  ## Examples
+
+  Both neighbouring `/25`s are combined (no parent) and the `/26` is removed as well.
+
+      iex> f = fn v1, v2 -> if v1==v2, do: {:ok, v1}, else: nil end
+      iex> [{"1.1.1.0/26", true}, {"1.1.1.0/25", true}, {"1.1.1.128/25", true}]
+      ...> |> new()
+      ...> |> minimize(f)
+      ...> |> to_list()
+      ...> |> Enum.map(fn {k, v} -> {"#{k}", v} end)
+      [{"1.1.1.0/24", true}]
+
+  The `/25`s cannot be combined since their parent exists and has a different value.
+
+      iex> f = fn v1, v2 -> if v1==v2, do: {:ok, true}, else: nil end
+      iex> [{"1.1.1.0/24", false}, {"1.1.1.0/25", true}, {"1.1.1.128/25", true}]
+      ...> |> new()
+      ...> |> minimize(f)
+      ...> |> to_list()
+      ...> |> Enum.map(fn {k,v} -> {"#{k}", v} end)
+      [{"1.1.1.0/25", true}, {"1.1.1.0/24", false}, {"1.1.1.128/25", true}]
+
+  Only `1.1.1.128/25` can be combined with `1.1.1.0/24`.
+
+      iex> f = fn v1, v2 -> if v1==v2, do: {:ok, true}, else: nil end
+      iex> [{"1.1.1.0/24", true}, {"1.1.1.0/25", false}, {"1.1.1.128/25", true}]
+      ...> |> new()
+      ...> |> minimize(f)
+      ...> |> to_list()
+      ...> |> Enum.map(fn {k,v} -> {"#{k}", v} end)
+      [{"1.1.1.0/25", false}, {"1.1.1.0/24", true}]
+
+  """
+  @spec minimize(t, function) :: t
+  def minimize(tree, fun) do
+    do_prune = fn
+      {_p0, _p1, v1, _p2, v2} -> fun.(v1, v2)
+      {_p0, _v0, _p1, _v1, _p2, _v2} -> nil
+    end
+
+    tree
+    |> prune(do_prune, recurse: true)
+    |> to_list()
+    |> Enum.sort_by(fn {k, _} -> k end, {:desc, Pfx})
+    |> Enum.reduce(new(), fn {pfx, val}, acc ->
+      with {k, v} <- lookup(acc, pfx),
+           {:ok, retval} <- fun.(v, val) do
+        put(acc, k, retval)
+      else
+        nil -> put(acc, pfx, val)
+      end
+    end)
+  end
+
   @doc """
   Returns all the prefix,value-pairs where the search `prefix` is a prefix for
   the stored prefix.
@@ -1515,7 +1588,7 @@ defmodule Iptrie do
   specific prefix.  If matched, `fun` is called on its value.  If
   `prefix` had no longest prefix match, the `trie` is returned unchanged.
 
-  ## Examples
+  ## Example
 
       iex> ipt = new()
       ...> |> put("1.1.1.0/24", 0)
@@ -1556,7 +1629,7 @@ defmodule Iptrie do
   `prefix` had no longest prefix match, the `default` is inserted under
   `prefix` and `fun` is not called.
 
-  ## Examples
+  ## Example
 
       iex> ipt = new()
       ...> |> update("1.1.1.0/24", 0, fn x -> x + 1 end)

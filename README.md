@@ -128,6 +128,27 @@ in one of the IPv4 or IPv6 special-purpose address registries.
 
 ## Examples
 
+Minimize an Iptrie to its bare minimum by combining neighbouring prefixes and
+removing more specific prefixes.
+
+    iex> f = fn v1, v2 -> if v1==v2, do: {:ok, v1}, else: nil end
+    iex> [
+    ...>  {"1.1.1.0/25", true},
+    ...>  {"1.1.1.128/25", true},
+    ...>  {"2.2.2.0/24", true},
+    ...>  {"2.2.2.0/28", true},
+    ...>  {"2.2.2.2", true}
+    ...> ]
+    ...> |> new()
+    ...> |> minimize(f)
+    ...> |> to_list()
+    ...> |> Enum.map(fn {k, v} -> {"#{k}", v} end)
+    [
+     {"1.1.1.0/24", true},
+     {"2.2.2.0/24", true}
+    ]
+
+
 Summarize an Iptrie containing a list of full length prefixes within a /24,
 with 1 missing address:
 
