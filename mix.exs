@@ -12,7 +12,7 @@ defmodule Iptrie.MixProject do
   # mix hex.publish
 
   @source_url "https://github.com/hertogp/iptrie"
-  @version "0.9.0"
+  @version "0.10.0"
 
   def project do
     [
@@ -61,8 +61,8 @@ defmodule Iptrie.MixProject do
 
   defp deps do
     [
-      {:radix, "~> 0.3"},
-      {:pfx, "~> 0.6"},
+      {:radix, "~> 0.5"},
+      {:pfx, "~> 0.14"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: :dev, runtime: false},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},

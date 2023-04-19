@@ -538,6 +538,19 @@ defmodule IptrieTest do
     assert_raise ArgumentError, fn -> merge(@test_trie, bad, keep1) end
   end
 
+  test "minimize/2 raises on invalid input" do
+    # raises on bad tree
+    good_f = fn v1, v2 -> if v1 == v2, do: {:ok, v1}, else: nil end
+
+    for bad <- @bad_trees,
+        do: assert_raise(ArgumentError, fn -> minimize(bad, good_f) end)
+
+    # bad functions
+    assert_raise(ArgumentError, fn -> minimize(@test_trie, fn -> nil end) end)
+    assert_raise(ArgumentError, fn -> minimize(@test_trie, fn v -> v end) end)
+    assert_raise(ArgumentError, fn -> minimize(@test_trie, fn _, _, _ -> nil end) end)
+  end
+
   test "minimize/2 handles neighbours" do
     f = fn v1, v2 -> if v1 == v2, do: {:ok, v1}, else: nil end
 

@@ -5,26 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.9.0] - 2023-04-16
+## [v0.10.0] - 2023-04-19
+
+### added
+
+- `Iptrie.minimize/1` as convenience wrapper for `Iptrie.minimize/2`.
 
 ### fixed
 
-- some documentation
+- error handling for `Iptrie.minimize/2`, consistent with other functions
+
+## [v0.9.0] - 2023-04-16
+
 
 ### added
 
 - `Iptrie.minimize/2` to easily minimize an Iptrie.
 
+### fixed
+
+- some documentation
+
 ## [v0.8.0] - 2022-02-20
+
+### added
+
+- `Iptrie.iana_special/2` which delegates to `Iptrie.Iana.lookup/2`
 
 ### changed
 
 - updated Pfx to latest version, so IPv6 is formatted with shorthand notation
     - tests were modified accordingly
-
-### added
-
-- `Iptrie.iana_special/2` which delegates to `Iptrie.Iana.lookup/2`
 
 
 ## [v0.7.0] - 2022-01-16
@@ -60,29 +71,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## v0.5.0 - 2021-07-25
 
-### changed
-- Pulled in `Radix` 0.3.0, for `Radix.prune/3`
-
 ### added
 - `Iptrie.prune/3` to prune an Iptrie, optionally doing so recursively
 
+### changed
+- Pulled in `Radix` 0.3.0, for `Radix.prune/3`
+
 
 ## v0.4.0 - 2021-07-20
-
-## changed
-- Merged [#1](https://github.com/hertogp/iptrie/pull/1) misc doc changes
-- Pulled in `Pfx` 0.5.0
-- Pulled in `Radix` 0.2.0
-- Updated deps with new versions of `Pfx` and `Radix`
-- `Iptrie.delete/2` only deletes a single prefix, now `Iptrie.drop/2` is available
-- `Iptrie.filter/2` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
-- `Iptrie.get/2` no longer gets a list of prefixes, just 1 prefix at a time
-- `Iptrie.keys/2` returns keys for a single type only
-- `Iptrie.reduce/3` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
-- `Iptrie.reduce/4` takes a single type only, not a list of types
-- `Iptrie.reduce/4` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
-- `Iptrie.to_list/2` returns prefix,value-pairs for a single type only
-- `Iptrie.values/2` returns values for a single radix tree type only
 
 ## added
 - `Iptrie.count/1`, return count of all entries in an Iptrie
@@ -100,6 +96,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Iptrie.split/3`, split one trie into two (optionally using lpm)
 - `Iptrie.take/3`, return new Iptrie contains just the given keys
 - `Iptrie.types/1`, returns a list of available types or maxlen's in the trie
+
+## changed
+- Merged [#1](https://github.com/hertogp/iptrie/pull/1) misc doc changes
+- Pulled in `Pfx` 0.5.0
+- Pulled in `Radix` 0.2.0
+- Updated deps with new versions of `Pfx` and `Radix`
+- `Iptrie.delete/2` only deletes a single prefix, now `Iptrie.drop/2` is available
+- `Iptrie.filter/2` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
+- `Iptrie.get/2` no longer gets a list of prefixes, just 1 prefix at a time
+- `Iptrie.keys/2` returns keys for a single type only
+- `Iptrie.reduce/3` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
+- `Iptrie.reduce/4` takes a single type only, not a list of types
+- `Iptrie.reduce/4` user callback now takes a `t:Pfx.t/0` instead of bitstring radix key
+- `Iptrie.to_list/2` returns prefix,value-pairs for a single type only
+- `Iptrie.values/2` returns values for a single radix tree type only
 
 
 ## v0.3.0 - 2021-07-06

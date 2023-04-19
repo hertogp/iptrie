@@ -897,75 +897,139 @@ defmodule Iptrie do
   @doc ~S"""
   Minimizes a trie by pruning and removing more specific prefixes, where possible.
 
-  `fun` has function signature `(any, any) -> {:ok, any} | nil`.
-  Whenever prefixes are found that could be combined, `fun` is called
-  with their values.
+  Two neighbours storing the same value are be combined when there is no parent.
+  If there is a parent that also stores the same value, the neighbors are deleted. In
+  case the parent stores a different value, the neighbours remain in the tree.
 
-  If `fun` returns nil, nothing happens.
+  Any other more specific prefixes that store the same value as a less specific
+  prefix are removed from the tree.
 
-  In case of two neighbours, a non-existing parent and an `{:ok, value}`, the
-  value is stored under the parent and the two neighbors are deleted. `fun` is
-  called with the leftmost neighbour's value as its first argument while the
-  second argument is the rightmost neighbour's value.
-
-  In case of a less and a more specific prefix and an `{:ok, value}`, the value
-  is stored under the less specific prefix and the more specific prefix is deleted.
-  `fun` is called with the less spefic prefix' value as its first argument and
-  the more specific prefix's value as its second argument.
+  For more control on handling values encountered, use `minimize/2`.
 
   ## Examples
 
   Both neighbouring `/25`s are combined (no parent) and the `/26` is removed as well.
 
-      iex> f = fn v1, v2 -> if v1==v2, do: {:ok, v1}, else: nil end
       iex> [{"1.1.1.0/26", true}, {"1.1.1.0/25", true}, {"1.1.1.128/25", true}]
       ...> |> new()
-      ...> |> minimize(f)
+      ...> |> minimize()
       ...> |> to_list()
       ...> |> Enum.map(fn {k, v} -> {"#{k}", v} end)
       [{"1.1.1.0/24", true}]
 
   The `/25`s cannot be combined since their parent exists and has a different value.
 
-      iex> f = fn v1, v2 -> if v1==v2, do: {:ok, true}, else: nil end
       iex> [{"1.1.1.0/24", false}, {"1.1.1.0/25", true}, {"1.1.1.128/25", true}]
       ...> |> new()
-      ...> |> minimize(f)
+      ...> |> minimize()
       ...> |> to_list()
       ...> |> Enum.map(fn {k,v} -> {"#{k}", v} end)
       [{"1.1.1.0/25", true}, {"1.1.1.0/24", false}, {"1.1.1.128/25", true}]
 
   Only `1.1.1.128/25` can be combined with `1.1.1.0/24`.
 
-      iex> f = fn v1, v2 -> if v1==v2, do: {:ok, true}, else: nil end
-      iex> [{"1.1.1.0/24", true}, {"1.1.1.0/25", false}, {"1.1.1.128/25", true}]
+      iex> [{"1.1.1.0/24", 1}, {"1.1.1.0/25", 0}, {"1.1.1.128/25", 1}]
+      ...> |> new()
+      ...> |> minimize()
+      ...> |> to_list()
+      ...> |> Enum.map(fn {k,v} -> {"#{k}", v} end)
+      [{"1.1.1.0/25", 0}, {"1.1.1.0/24", 1}]
+
+  Works across all types of radix trees in the `t:Iptrie.t/0`.
+
+      iex> [
+      ...> {"1.1.1.0/25", 4},
+      ...> {"acdc:1975::/32", 6},
+      ...> {"1.1.1.128/25", 4},
+      ...> {"acdc::/16", 6},
+      ...> {"ac-dc-00-00-00-00/16", 48},
+      ...> {"ac-dc-19-75-00-00/32", 48}
+      ...> ]
+      ...> |> new()
+      ...> |> minimize()
+      ...> |> to_list()
+      ...> |> Enum.map(fn {k, v} -> {"#{k}", v} end)
+      [
+        {"1.1.1.0/24", 4},
+        {"AC-DC-00-00-00-00/16", 48},
+        {"acdc::/16", 6}
+      ]
+
+  """
+  @spec minimize(t) :: t
+  def minimize(%__MODULE__{} = trie) do
+    f = fn v1, v2 -> if v1 == v2, do: {:ok, v1} end
+
+    trie
+    |> minimize(f)
+  end
+
+  @doc ~S"""
+  Minimizes a trie by pruning and removing more specific prefixes, where possible.
+
+  `fun` has function signature `(any, any) -> {:ok, any} | nil`.
+  Whenever prefixes are found that could be combined, `fun` is called
+  with their values.
+
+  If `fun` returns nil, nothing happens.
+
+  In case of a less and a more specific prefix and an `{:ok, value}`, the value
+  is stored under the less specific prefix and the more specific prefix is deleted.
+  `fun` is called with the less specific prefix's value as its first argument and
+  the more specific prefix's value as its second argument.
+
+  In case of two neighbours, a non-existing parent and an `{:ok, value}`, the
+  value is stored under the parent and the two neighbors are deleted. `fun` is
+  called with the leftmost neighbour's value as its first argument while the
+  second argument is the rightmost neighbour's value.
+
+  ## Examples
+
+  Summarize statistics to their least specific prefix.
+
+      iex> f = fn v1, v2 -> {:ok, v1 + v2} end
+      iex> [{"1.1.1.0/26", 10}, {"1.1.1.0/25", 20}, {"1.1.1.128/25", 30}]
       ...> |> new()
       ...> |> minimize(f)
       ...> |> to_list()
-      ...> |> Enum.map(fn {k,v} -> {"#{k}", v} end)
-      [{"1.1.1.0/25", false}, {"1.1.1.0/24", true}]
+      ...> |> Enum.map(fn {k, v} -> {"#{k}", v} end)
+      [{"1.1.1.0/24", 60}]
 
+  Same, but this time the least specific prefix is also present in the tree.
+
+      iex> f = fn v1, v2 -> {:ok, v1 + v2} end
+      iex> [{"1.1.1.0/24", 12}, {"1.1.1.0/26", 10}, {"1.1.1.0/25", 10}, {"1.1.1.128/25", 10}]
+      ...> |> new()
+      ...> |> minimize(f)
+      ...> |> to_list()
+      ...> |> Enum.map(fn {k, v} -> {"#{k}", v} end)
+      [{"1.1.1.0/24", 42}]
   """
   @spec minimize(t, function) :: t
-  def minimize(tree, fun) do
-    do_prune = fn
+  def minimize(%__MODULE__{} = trie, fun) when is_function(fun, 2) do
+    # Since we prune after minimizing, two neighbors with a less specific parent
+    # will have different values and so cannot be combined.
+    pruner = fn
       {_p0, _p1, v1, _p2, v2} -> fun.(v1, v2)
-      {_p0, _v0, _p1, _v1, _p2, _v2} -> nil
+      _ -> nil
     end
 
-    tree
-    |> prune(do_prune, recurse: true)
-    |> to_list()
-    |> Enum.sort_by(fn {k, _} -> k end, {:desc, Pfx})
-    |> Enum.reduce(new(), fn {pfx, val}, acc ->
-      with {k, v} <- lookup(acc, pfx),
-           {:ok, retval} <- fun.(v, val) do
-        put(acc, k, retval)
-      else
-        nil -> put(acc, pfx, val)
-      end
+    trie
+    |> Iptrie.types()
+    |> Enum.reduce(Iptrie.new(), fn type, acc ->
+      trie
+      |> Iptrie.radix(type)
+      |> Radix.minimize(fun)
+      |> then(fn radix -> Map.put(acc, type, radix) end)
     end)
+    |> Iptrie.prune(pruner, recurse: true)
   end
+
+  def minimize(%__MODULE__{} = _trie, fun),
+    do: raise(arg_err(:bad_fun, {fun, 2}))
+
+  def minimize(trie, _fun),
+    do: raise(arg_err(:bad_trie, trie))
 
   @doc """
   Returns all the prefix,value-pairs where the search `prefix` is a prefix for
