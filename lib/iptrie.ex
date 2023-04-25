@@ -1007,13 +1007,6 @@ defmodule Iptrie do
   """
   @spec minimize(t, function) :: t
   def minimize(%__MODULE__{} = trie, fun) when is_function(fun, 2) do
-    # Since we prune after minimizing, two neighbors with a less specific parent
-    # will have different values and so cannot be combined.
-    pruner = fn
-      {_p0, _p1, v1, _p2, v2} -> fun.(v1, v2)
-      _ -> nil
-    end
-
     trie
     |> Iptrie.types()
     |> Enum.reduce(Iptrie.new(), fn type, acc ->
@@ -1022,7 +1015,6 @@ defmodule Iptrie do
       |> Radix.minimize(fun)
       |> then(fn radix -> Map.put(acc, type, radix) end)
     end)
-    |> Iptrie.prune(pruner, recurse: true)
   end
 
   def minimize(%__MODULE__{} = _trie, fun),
