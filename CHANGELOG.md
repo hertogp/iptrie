@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Iptrie.minimize/2`, there was no need for pruning (already done by `Radix.minimize/2`
 
+## fixed
+
+- `Iptrie.reduce/3`, now raises if `fun` has the wrong signature.
+
 ## [v0.10.0] - 2023-04-19
 
 ### added

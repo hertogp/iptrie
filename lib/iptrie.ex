@@ -1387,6 +1387,9 @@ defmodule Iptrie do
     err -> raise err
   end
 
+  def reduce(%__MODULE__{} = _trie, _acc, fun),
+    do: raise(arg_err(:bad_fun, {fun, 3}))
+
   def reduce(trie, _acc, _fun),
     do: raise(arg_err(:bad_trie, trie))
 
